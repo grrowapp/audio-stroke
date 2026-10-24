@@ -88,7 +88,7 @@ export const GeneratedScenarioSchema = z
     nodes: z.array(NodeSchema).min(1).max(40),
     control_nodes: z.array(ControlNodeSchema).min(1).max(12),
     policy: PolicySchema,
-    design_notes: z.string().trim().max(600).describe('簡潔な設計説明（推論全文は不要）'),
+    design_notes: z.string().trim().max(600).describe('グラフ構成の要点（2〜3 文）'),
   })
   .strict()
 

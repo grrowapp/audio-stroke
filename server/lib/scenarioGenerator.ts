@@ -81,7 +81,7 @@ ${rules}
 - 「はい、でもちょっと待って」「大丈夫です」「それは結構です」のような曖昧な返答は、直前の質問次第で意味が変わる点を考慮する。
 
 # 出力
-- 指定スキーマの JSON 一つだけ。design_notes には設計の要点を簡潔に（推論の全文は不要）。
+- 指定スキーマの JSON 一つだけ。design_notes にはグラフ構成の要点を 2〜3 文で書く。
 - スキーマ（制約付き）: ${fullJsonSchemaText()}
 `
 }
@@ -264,7 +264,7 @@ export class ClaudeScenarioGenerator extends BaseGenerator {
       throw e
     }
     const usage = { provider: 'anthropic', model: message.model ?? this.model, input_tokens: message.usage?.input_tokens ?? null, output_tokens: message.usage?.output_tokens ?? null, request_id: message._request_id ?? null }
-    if (message.stop_reason === 'refusal') throw new GenerationError('refusal', 'Claude が生成を辞退しました（stop_reason=refusal）', [usage])
+    if (message.stop_reason === 'refusal') throw new GenerationError('refusal', `Claude が生成を辞退しました（stop_reason=refusal, stop_details=${JSON.stringify(message.stop_details ?? null)}）`, [usage])
     if (message.stop_reason === 'max_tokens') throw new GenerationError('truncated', '出力が max_tokens で途切れました。ノード数・例文数を減らしてください。', [usage])
     if (s.claudeOutputMode === 'tool') {
       const uses = (message.content as any[]).filter((b) => b.type === 'tool_use' && b.name === 'submit_scenario')
