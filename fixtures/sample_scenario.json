@@ -1,0 +1,222 @@
+{
+  "title": "問い合わせ受付（料金・デモ・操作サポート）",
+  "entry_node_id": "select_need",
+  "design_notes": "用件選択→内容確認→終了の2段構成。確認で否定・訂正された場合のみ用件選択へ戻る（訂正分岐）。具体額や予約完了は発話しない。",
+  "nodes": [
+    {
+      "id": "select_need",
+      "label": "用件選択",
+      "assistant_text": "お問い合わせありがとうございます。料金のご案内、デモのご相談、操作のサポートのうち、どちらをご希望でしょうか。",
+      "terminal": false,
+      "fallback_node_id": "clarify_need",
+      "no_input_node_id": "no_input_need",
+      "edges": [
+        {
+          "id": "pricing",
+          "label": "料金案内",
+          "intent_description": "料金・価格・プラン・費用について知りたい",
+          "match_conditions": ["料金や費用、プランの違いについて尋ねている", "途中で別の用件に訂正した場合は訂正後の用件を優先する"],
+          "positive_examples": ["料金を知りたい", "いくらかかりますか", "プランの値段が知りたいです", "費用について"],
+          "negative_examples": ["料金、ではなくデモです", "使い方が分からない"],
+          "target_node_id": "confirm_pricing",
+          "kind": "normal"
+        },
+        {
+          "id": "demo",
+          "label": "デモ相談",
+          "intent_description": "製品デモを見たい・デモの相談をしたい",
+          "match_conditions": ["デモ、実演、お試し、見てみたいという希望"],
+          "positive_examples": ["デモを見たい", "デモをお願いします", "料金、ではなくデモです", "実際に動くところを見たい"],
+          "negative_examples": ["料金を知りたい"],
+          "target_node_id": "confirm_demo",
+          "kind": "normal"
+        },
+        {
+          "id": "support",
+          "label": "操作サポート",
+          "intent_description": "使い方や操作方法が分からず支援してほしい",
+          "match_conditions": ["操作・設定・使い方・エラーに関する相談"],
+          "positive_examples": ["使い方が分からない", "操作方法を教えてほしい", "ログインできません", "設定で困っています"],
+          "negative_examples": ["デモを見たい"],
+          "target_node_id": "confirm_support",
+          "kind": "normal"
+        }
+      ]
+    },
+    {
+      "id": "confirm_pricing",
+      "label": "料金案内の確認",
+      "assistant_text": "料金のご案内ですね。プランや条件によって異なるため、詳しい内容は担当者から改めてご案内します。この内容でよろしいでしょうか。",
+      "terminal": false,
+      "fallback_node_id": "clarify_confirm",
+      "no_input_node_id": "no_input_confirm",
+      "edges": [
+        {
+          "id": "yes",
+          "label": "はい",
+          "intent_description": "確認内容に同意している",
+          "match_conditions": ["肯定・了承の返事"],
+          "positive_examples": ["はい", "お願いします", "それで大丈夫です", "大丈夫です"],
+          "negative_examples": ["はい、でもちょっと待って", "いいえ", "それは結構です"],
+          "target_node_id": "end_pricing",
+          "kind": "confirm"
+        },
+        {
+          "id": "change",
+          "label": "用件を変更",
+          "intent_description": "確認内容を否定した、または別の用件に変えたい",
+          "match_conditions": ["否定、辞退、別の用件への訂正、前の質問に戻りたい"],
+          "positive_examples": ["いいえ、違います", "それは結構です", "前の話に戻って", "やっぱりデモがいいです"],
+          "negative_examples": ["はい"],
+          "target_node_id": "select_need",
+          "kind": "correction"
+        }
+      ]
+    },
+    {
+      "id": "confirm_demo",
+      "label": "デモ相談の確認",
+      "assistant_text": "デモのご相談ですね。日程などの詳細は担当者が確認のうえご連絡します。この内容でよろしいでしょうか。",
+      "terminal": false,
+      "fallback_node_id": "clarify_confirm",
+      "no_input_node_id": "no_input_confirm",
+      "edges": [
+        {
+          "id": "yes",
+          "label": "はい",
+          "intent_description": "確認内容に同意している",
+          "match_conditions": ["肯定・了承の返事"],
+          "positive_examples": ["はい", "お願いします", "大丈夫です"],
+          "negative_examples": ["はい、でもちょっと待って", "いいえ", "それは結構です"],
+          "target_node_id": "end_demo",
+          "kind": "confirm"
+        },
+        {
+          "id": "change",
+          "label": "用件を変更",
+          "intent_description": "確認内容を否定した、または別の用件に変えたい",
+          "match_conditions": ["否定、辞退、別の用件への訂正、前の質問に戻りたい"],
+          "positive_examples": ["いいえ", "それは結構です", "前の話に戻って", "やっぱり料金が知りたい"],
+          "negative_examples": ["はい"],
+          "target_node_id": "select_need",
+          "kind": "correction"
+        }
+      ]
+    },
+    {
+      "id": "confirm_support",
+      "label": "操作サポートの確認",
+      "assistant_text": "操作サポートのご希望ですね。サポート担当から改めてご連絡します。この内容でよろしいでしょうか。",
+      "terminal": false,
+      "fallback_node_id": "clarify_confirm",
+      "no_input_node_id": "no_input_confirm",
+      "edges": [
+        {
+          "id": "yes",
+          "label": "はい",
+          "intent_description": "確認内容に同意している",
+          "match_conditions": ["肯定・了承の返事"],
+          "positive_examples": ["はい", "お願いします", "大丈夫です"],
+          "negative_examples": ["はい、でもちょっと待って", "いいえ"],
+          "target_node_id": "end_support",
+          "kind": "confirm"
+        },
+        {
+          "id": "change",
+          "label": "用件を変更",
+          "intent_description": "確認内容を否定した、または別の用件に変えたい",
+          "match_conditions": ["否定、辞退、別の用件への訂正、前の質問に戻りたい"],
+          "positive_examples": ["いいえ", "それは結構です", "前の話に戻って"],
+          "negative_examples": ["はい"],
+          "target_node_id": "select_need",
+          "kind": "correction"
+        }
+      ]
+    },
+    {
+      "id": "end_pricing",
+      "label": "料金案内で終了",
+      "assistant_text": "承知しました。料金については担当者より改めてご連絡いたします。お問い合わせありがとうございました。",
+      "terminal": true,
+      "edges": [],
+      "fallback_node_id": null,
+      "no_input_node_id": null
+    },
+    {
+      "id": "end_demo",
+      "label": "デモ相談で終了",
+      "assistant_text": "承知しました。デモについては担当者より改めてご連絡いたします。お問い合わせありがとうございました。",
+      "terminal": true,
+      "edges": [],
+      "fallback_node_id": null,
+      "no_input_node_id": null
+    },
+    {
+      "id": "end_support",
+      "label": "操作サポートで終了",
+      "assistant_text": "承知しました。サポート担当より改めてご連絡いたします。お問い合わせありがとうございました。",
+      "terminal": true,
+      "edges": [],
+      "fallback_node_id": null,
+      "no_input_node_id": null
+    }
+  ],
+  "control_nodes": [
+    {
+      "id": "clarify_need",
+      "label": "用件の聞き返し",
+      "kind": "clarify",
+      "assistant_text": "恐れ入ります、うまくお伺いできませんでした。料金のご案内、デモのご相談、操作のサポートのどれかでお答えいただけますか。",
+      "action": "RETURN_TO_ORIGIN",
+      "goto_node_id": null
+    },
+    {
+      "id": "clarify_confirm",
+      "label": "確認の聞き返し",
+      "kind": "clarify",
+      "assistant_text": "恐れ入ります。この内容でよろしければ「はい」、違う場合は「いいえ」とお答えください。",
+      "action": "RETURN_TO_ORIGIN",
+      "goto_node_id": null
+    },
+    {
+      "id": "no_input_need",
+      "label": "用件の無応答",
+      "kind": "no_input",
+      "assistant_text": "お声が確認できませんでした。料金、デモ、操作サポートのうち、ご希望をお話しください。",
+      "action": "RETURN_TO_ORIGIN",
+      "goto_node_id": null
+    },
+    {
+      "id": "no_input_confirm",
+      "label": "確認の無応答",
+      "kind": "no_input",
+      "assistant_text": "お声が確認できませんでした。よろしければ「はい」、違う場合は「いいえ」とお答えください。",
+      "action": "RETURN_TO_ORIGIN",
+      "goto_node_id": null
+    },
+    {
+      "id": "limit_handoff",
+      "label": "担当者案内で終了",
+      "kind": "limit",
+      "assistant_text": "申し訳ございません。うまくお伺いできなかったため、担当者より改めてご連絡いたします。お問い合わせありがとうございました。",
+      "action": "END",
+      "goto_node_id": null
+    },
+    {
+      "id": "end_request",
+      "label": "終了希望",
+      "kind": "end_request",
+      "assistant_text": "承知しました。それでは終了いたします。お問い合わせありがとうございました。",
+      "action": "END",
+      "goto_node_id": null
+    }
+  ],
+  "policy": {
+    "max_turns": 10,
+    "max_clarify_per_node": 2,
+    "max_no_input_per_node": 2,
+    "no_input_timeout_ms": 8000,
+    "limit_node_id": "limit_handoff",
+    "end_request_node_id": "end_request"
+  }
+}
