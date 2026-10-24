@@ -10,6 +10,7 @@ const rt = reactive({
   silence_duration_ms: 600, final_grace_ms: 200, preview_enabled: true, preview_min_audio_ms: 800, preview_interval_ms: 800, preview_max_per_utterance: 3,
   barge_in_enabled: false, barge_in_confirm_ms: 250,
 })
+const consent = ref(false)
 const mockPreview = ref('ctrl_unclear')
 const mockFinal = ref('ctrl_unclear')
 
@@ -53,8 +54,9 @@ function exportLog() {
         <label>割り込み確認猶予 ms <input id="rsBargeConfirm" v-model.number="rt.barge_in_confirm_ms" type="number"></label>
       </div>
     </details>
+    <label class="check"><input id="chkConsent" v-model="consent" type="checkbox"> マイク音声が OpenAI Realtime API に送信され、AI 生成音声が再生され、利用料金が発生することを理解しました。機密・個人情報を含めずに試します。</label>
     <div class="row">
-      <button id="btnStart" type="button" :disabled="!ready || st.connected" @click="start">会話開始</button>
+      <button id="btnStart" type="button" :disabled="!ready || st.connected || !consent" @click="start">会話開始</button>
       <button id="btnStop" type="button" class="danger" @click="conv.stop()">停止</button>
       <button id="btnSkip" type="button" class="secondary" @click="conv.skip()">再生中断（回答へ）</button>
       <button v-if="st.phase === 'PLAYBACK_ERROR'" id="btnRetryPlay" type="button" class="secondary" @click="conv.retryPlayback()">再生を再試行</button>

@@ -123,11 +123,12 @@ export function useConversation() {
       case 'final':
         st.final = `${m.label} [${m.branch_id}]${m.fallback_reason ? ' fallback:' + m.fallback_reason : ''}`
         st.nextText = m.next_text
-        log(`final ${m.branch_id}${m.fallback_reason ? ' (' + m.fallback_reason + ')' : ''}`)
+        log(`final ${m.branch_id}${m.fallback_reason ? ' (' + m.fallback_reason + ')' : ''}${m.usage ? ' usage=' + JSON.stringify(m.usage) : ''}`)
         break
       case 'final_invalidated': st.final = `（再発話のため無効化: ${m.reason}）`; log('final invalidated'); break
       case 'metric': st.metrics[m.name] = m.value_ms; break
       case 'playback_error': st.error = m.message; log('playback_error'); break
+      case 'realtime_error': st.error = `Realtime API エラー: ${m.code} ${m.message}`; log('realtime_error ' + m.code); break
       case 'finished':
         log(`finished ${m.phase} ${m.reason}`)
         st.finished = true
@@ -219,7 +220,15 @@ export function useConversation() {
         await ctx.audioWorklet.addModule('/worklet.js')
         const src = ctx.createMediaStreamSource(stream)
         node = new AudioWorkletNode(ctx, 'pcm-capture')
-        node.port.onmessage = (e) => { if (st.micEnabled && ws && ws.readyState === 1) ws.send(tagged(e.data)) }
+        node.port.onmessage = (e) => {
+          if (!(st.micEnabled && ws && ws.readyState === 1)) return
+          if (ws.bufferedAmount > 24000 * 2) { // > 1 s of audio stuck in the socket: stop instead of silently lagging
+            st.error = '音声送信が1秒以上滞留したため停止しました。ネットワークを確認してください。'
+            send({ type: 'stop' })
+            return
+          }
+          ws.send(tagged(e.data))
+        }
         src.connect(node)
       }
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'

@@ -4,7 +4,7 @@
 
 実装は **Nuxt 4（Vue 3 + TypeScript）+ Nitro サーバー** の単一プロセスです。以前の Python/FastAPI 版は Git 履歴（`c3330ec`）にあり、この版はそれを TypeScript に書き直し、**アシスタント発話への割り込み（barge-in）** を追加したものです。
 
-> **既存 MVP について**: 指示書が基点とする既存 `realtime_branch_mvp` のコードはこのリポジトリに無かったため、指示書 §1 の構成（`app.py` / `router.py` / `client.js` / `worklet.js` 相当の接合点）を同じ接合点で再現したうえで拡張しています。元のコードとの差分確認はできていません。
+> **元の Python MVP との対応**: 指示書が基点とする `realtime_branch_mvp`（FastAPI 版: `app.py` / `router.py` / `client.js` / `worklet.js`）は後から提供されたものと突き合わせ、接合点（`conversation:"none"` + `item_reference` の out-of-band `response.create`、`select_branch`、`speech_stopped` → committed → `conversation.item.done` 後の分類、`vad_event_to_branch_ms` / `request_to_branch_ms`、別発話の結果の無視、完了後の item 削除とバッファ clear）を同じ意味で引き継いでいます。元 MVP にあってこの版に無かった以下も取り込み済みです: 関数引数の余分なキー（`execute: true` 等）と空/長すぎる `reason` の拒否、`tool_choice` の関数指定、音声中の「システム変更・関数仕様変更」要求に従わない指示と「相づち・複数候補・『大丈夫です』は文脈次第で聞き返し」の指示、セッション上限時間（既定 10 分）、同時セッション数の上限（既定 1）、ブラウザ送信バッファ滞留時の停止、開始前の同意チェック、判定ごとの `usage`。元 MVP の固定 4 状態（SELECT_NEED / CONFIRM_*）は `tests/router.test.ts` で動的グラフ上に再現しています。
 
 ## 役割分担
 
@@ -97,6 +97,9 @@ npm run dev               # http://127.0.0.1:8000（開発）
 - 手動の「再生中断」ボタンも中断した発話を記録し、そのノードへの回答として受付へ移ります。
 - 再生中の切断は次ノードへ進めず、再開始を求めます。開始クリックで AudioContext を resume し、最初の音声を開始前に decode します。
 
+### 疎結合な core（ネイティブ再実装の境界）
+応答速度に直接関わる部分（音声取り込み、PCM リングバッファ、Realtime 通信、preview/final/barge-in の判定、再生指示、タイマー）は `server/core/` に隔離し、ホストは `Engine` インターフェースだけに依存します。`ConversationEngine` は Node API を直接使わず `EngineHost`（時計・タイマー・乱数・base64・ログ）経由で動くため、同じ契約をネイティブ（Rust/C++ 等）で実装して差し替えられます。`ENGINE_IMPL=subprocess ENGINE_CMD=/path/to/core` で、stdio 上の長さ付きフレーム（JSON / PCM）で話す子プロセス実装に切り替えられます（`server/core/subprocessEngine.ts`、偽 core によるテスト `tests/subprocessEngine.test.ts`）。契約の詳細と守るべき不変条件は [`docs/CORE_PROTOCOL.md`](docs/CORE_PROTOCOL.md)。
+
 ## 遅延指標（測定境界）
 
 サーバーは `performance.now()`（monotonic）、ブラウザは `performance.now()` で計測し、異なる時計の値は引き算しません。
@@ -140,7 +143,8 @@ npm test                 # APIキー不要。初回は Nuxt を build してか�
 | `tests/jobsTts.test.ts` | キャッシュキー、再利用/miss、atomic write、不正形式、途中失敗と失敗分のみ再試行、取消、上限、再起動回収、版の不変性、二重開始 |
 | `tests/ringBuffer.test.ts` | prefix 切り出し、チャンク境界、退避、奇数バイト、実行時設定の範囲 |
 | `tests/session.test.ts` | E2E（入口〜終端）、半二重、preview で料金 → final でデモ、preview が final 後に到着、preview 中に commit/clear しない、item モード、final 中の再発話、猶予中の再発話、参照中 item を削除しない、不正出力 → fallback、別 version/別ターン/重複 done、取消後の到着、timeout、no-input、上限、訂正、古い playback ended、再生失敗/中断、ack タイムアウト、切断、停止、cache miss で安全停止（会話中に TTS/Claude を呼ばない）、発話長上限、送信バッファ上限、前ターン音声を含めない。**barge-in**: 再生中のマイク送信、確認猶予後の再生停止と同ノード回答、短いバースト（エコー）の棄却と item 削除、終端は割り込み不可、再生終了直前の発話の引き継ぎ、playback 世代（古い ack・2 回目の割り込み） |
-| `tests/app.test.ts` | ビルド済み Nitro サーバーに対する HTTP/WS 統合: Origin/Host/Content-Type/サイズの防御、path traversal、生成 → 編集（新版）→ 承認 → READY → セッション、音声欠落で開始拒否、WebSocket E2E（MOCK Realtime、半二重と barge-in）、単回使用セッション、ログ内容 |
+| `tests/app.test.ts` | ビルド済み Nitro サーバーに対する HTTP/WS 統合: Origin/Host/Content-Type/サイズの防御、path traversal、生成 → 編集（新版）→ 承認 → READY → セッション、音声欠落で開始拒否、WebSocket E2E（MOCK Realtime、半二重と barge-in）、同時セッション上限、単回使用セッション、ログ内容 |
+| `tests/subprocessEngine.test.ts` | フレーミング、偽ネイティブ core の子プロセス駆動（init → play → ack → stop、音声転送、metrics 転送）、異常終了、`ENGINE_IMPL` による選択 |
 | `tests/evalFrontend.test.ts` | 評価 fixture の整合、`v-html`/`innerHTML` 不使用、秘密情報なし |
 | `tests/realapi/smoke.test.ts` | **有料**。`RUN_REAL_API=1` の時だけ実行 |
 
@@ -160,6 +164,6 @@ npm test                 # APIキー不要。初回は Nuxt を build してか�
 - `CLAUDE_REFUSAL_FALLBACK=default` はベータ機能のため既定 off。
 - TTS の `instructions`（発話スタイル）は `tts-1` 系では送りません（キャッシュキーには含めます）。
 - `node:sqlite` は Node 22 では experimental 扱いです。
-- 単一プロセス・ローカル専用。複数ワーカーでは動きません。
+- 単一プロセス・ローカル専用。複数ワーカーでは動きません。会話は既定で同時 1 セッション、1 セッション最大 10 分（`session_max_ms`）。
 
 詳細なイベント仕様: [`docs/API_EVENTS.md`](docs/API_EVENTS.md)

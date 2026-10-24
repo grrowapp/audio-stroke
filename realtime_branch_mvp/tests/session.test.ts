@@ -437,6 +437,26 @@ describe('conversation engine', () => {
     }
   })
 
+  it('session max duration ends the conversation explicitly; unrelated realtime errors are surfaced', async () => {
+    const h = make({ rs: { preview_enabled: false } })
+    h.rs.session_max_ms = 150
+    await h.start()
+    h.transport.push({ type: 'error', error: { code: 'rate_limit', message: 'slow down' } })
+    await h.until(() => h.msgs('realtime_error').length === 1)
+    expect(h.engine.phase).toBe('LISTENING') // not treated as an unclear utterance
+    await h.run
+    expect(h.engine.endReason).toBe('session_max'); expect(h.engine.phase).toBe('STOPPED')
+  })
+
+  it('final carries the provider usage of the decisive response', async () => {
+    const h = make({ rs: { final_grace_ms: 5, preview_enabled: false } })
+    await h.start()
+    await h.answer('demo')
+    await h.until(() => h.msgs('final').length === 1)
+    expect(h.msgs('final')[0]!.usage).toEqual({ input_tokens: 10, output_tokens: 5, total_tokens: 15 })
+    await h.stop()
+  })
+
   it('utterance too long / send buffer overflow are explicit stops', async () => {
     const h = make({ rs: { max_utterance_ms: 3000, preview_enabled: false } })
     await h.start()

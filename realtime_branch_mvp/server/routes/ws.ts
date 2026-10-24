@@ -7,12 +7,14 @@ import { defineWebSocketHandler } from 'h3'
 import type { Peer } from 'crossws'
 import { manifestMissing, type Manifest } from '../lib/audioStore'
 import { SessionMetrics } from '../lib/metrics'
-import { ConversationEngine, runtimeFromUser } from '../lib/realtimeSession'
+import { createEngine } from '../core/factory'
+import { runtimeFromUser } from '../core/runtime'
+import type { Engine } from '../core/types'
 import { ID_RE, READY } from '../lib/scenarioStore'
 import { services } from '../lib/services'
 import path from 'node:path'
 
-const engines = new WeakMap<Peer, ConversationEngine>()
+const engines = new WeakMap<Peer, Engine>()
 /** First byte of every binary audio frame from the browser (PCM16 follows). */
 export const AUDIO_TAG = 0x01
 
@@ -38,6 +40,11 @@ export default defineWebSocketHandler({
       peer.close(1008, 'no session')
       return
     }
+    if (svc.engines.size >= svc.settings.maxConcurrentSessions) {
+      sendJson(peer, { type: 'finished', phase: 'ERROR', reason: 'busy', message: `別の会話セッションが接続中です（同時 ${svc.settings.maxConcurrentSessions} 件まで）。` })
+      peer.close(1000)
+      return
+    }
     if (!svc.store.claimSession(sid)) {
       sendJson(peer, { type: 'finished', phase: 'ERROR', reason: 'session_used', message: 'このセッションは使用済みです。新しく開始してください。' })
       peer.close(1000)
@@ -51,21 +58,20 @@ export default defineWebSocketHandler({
       peer.close(1000)
       return
     }
-    let transport
+    const metrics = new SessionMetrics(path.join(svc.settings.dataDir, 'logs'), sid)
+    let engine: Engine
     try {
-      transport = svc.transportFactory()
+      engine = createEngine({
+        sessionId: sid, scenario: sc, manifest: row.manifest as Manifest, settings: runtimeFromUser(s.runtime), metrics,
+        sendBrowser: (msg) => sendJson(peer, msg), audio: svc.audio, transportFactory: svc.transportFactory, app: svc.settings,
+      })
     } catch (e: any) {
       sendJson(peer, { type: 'finished', phase: 'ERROR', reason: 'config', message: String(e.message) })
       svc.store.endSession(sid, 'error', 'config')
+      metrics.close({ end_reason: 'config' })
       peer.close(1000)
       return
     }
-    const metrics = new SessionMetrics(path.join(svc.settings.dataDir, 'logs'), sid)
-    const engine = new ConversationEngine({
-      sessionId: sid, scenario: sc, manifest: row.manifest as Manifest, audio: svc.audio, transport,
-      sendBrowser: (msg) => sendJson(peer, msg), settings: runtimeFromUser(s.runtime), metrics,
-      previewAudioMode: svc.settings.previewAudioMode, maxFrameBytes: svc.settings.maxWsAudioFrameBytes, maxSendBuffer: svc.settings.maxOpenaiSendBufferBytes,
-    })
     engines.set(peer, engine)
     svc.engines.set(sid, engine)
     engine.run().finally(() => {
@@ -97,7 +103,7 @@ export default defineWebSocketHandler({
     } catch {
       return
     }
-    if (msg && typeof msg === 'object' && !String((msg as any).type ?? '').startsWith('_')) engine.pushBrowserJson(msg as Record<string, unknown>)
+    if (msg && typeof msg === 'object' && !String((msg as any).type ?? '').startsWith('_')) engine.pushBrowserJson(msg as { type: string })
   },
 
   close(peer) {

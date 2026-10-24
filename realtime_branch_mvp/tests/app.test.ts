@@ -267,6 +267,22 @@ describe('WebSocket E2E (mock Realtime)', () => {
     ws.close()
   })
 
+  it('only MAX_CONCURRENT_SESSIONS live conversations', async () => {
+    const sid = await prepareReady()
+    const a = (await req('POST', '/api/sessions', { scenario_id: sid, version: 1 })).json
+    const b = (await req('POST', '/api/sessions', { scenario_id: sid, version: 1 })).json
+    const w1 = new WsClient(`ws://127.0.0.1:${PORT}/ws?session_id=${a.session_id}`, ORIGIN)
+    await w1.open()
+    await w1.until((m) => m.type === 'play')
+    const w2 = new WsClient(`ws://127.0.0.1:${PORT}/ws?session_id=${b.session_id}`, ORIGIN)
+    await w2.open()
+    const { m } = await w2.until((m) => m.type === 'finished')
+    expect(m.reason).toBe('busy')
+    w1.send({ type: 'stop' })
+    await w1.until((m) => m.type === 'finished')
+    w1.close(); w2.close()
+  })
+
   it('stop during playback', async () => {
     const sid = await prepareReady()
     const sess = (await req('POST', '/api/sessions', { scenario_id: sid, version: 1 })).json

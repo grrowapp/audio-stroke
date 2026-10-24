@@ -95,6 +95,8 @@ export interface Settings {
   maxWsTextBytes: number
   maxWsAudioFrameBytes: number
   maxOpenaiSendBufferBytes: number
+  /** Local MVP cost guard: concurrent live conversations. */
+  maxConcurrentSessions: number
 }
 
 export function loadSettings(overrides: Partial<Settings> = {}): Settings {
@@ -144,6 +146,7 @@ export function loadSettings(overrides: Partial<Settings> = {}): Settings {
     maxWsTextBytes: 16_000,
     maxWsAudioFrameBytes: 24_000, // 500 ms of PCM16 @ 24 kHz
     maxOpenaiSendBufferBytes: 4_000_000,
+    maxConcurrentSessions: envInt('MAX_CONCURRENT_SESSIONS', 1),
     ...overrides,
   }
   return s

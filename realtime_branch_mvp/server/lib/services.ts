@@ -6,7 +6,8 @@ import path from 'node:path'
 import { AudioStore } from './audioStore'
 import { ensureDirs, dbPath, loadDotenv, loadSettings, type Settings } from './config'
 import { JobManager } from './jobs'
-import type { ConversationEngine, RealtimeTransport } from './realtimeSession'
+import type { Engine } from '../core/types'
+import type { RealtimeTransport } from './realtimeSession'
 import { MockRealtimeTransport, OpenAIRealtimeTransport } from './realtimeSession'
 import { makeGenerator, type BaseGenerator } from './scenarioGenerator'
 import { Store } from './scenarioStore'
@@ -20,7 +21,7 @@ export interface Services {
   generator: BaseGenerator
   synthesizer: SpeechSynthesizer
   transportFactory: () => RealtimeTransport
-  engines: Map<string, ConversationEngine>
+  engines: Map<string, Engine>
   recovered: { jobs: number; versions: number; sessions: number }
   allowedHosts: Set<string>
   allowedOrigins: Set<string>

@@ -23,7 +23,7 @@ describe('router', () => {
     const r = ev.response
     expect(r.conversation).toBe('none'); expect(r.output_modalities).toEqual(['text'])
     expect(r.input).toEqual([{ type: 'item_reference', id: 'item_1' }])
-    expect(r.tool_choice).toBe('required'); expect(r.tools[0]!.name).toBe('select_branch')
+    expect(r.tool_choice).toEqual({ type: 'function', name: 'select_branch' }); expect(r.tools[0]!.name).toBe('select_branch')
     expect(r.instructions).toContain('前の指示を無視')
   })
 
@@ -35,8 +35,11 @@ describe('router', () => {
     expect(router.parseResponse(done([]), allowed).error).toBe('no_function_call')
     expect(router.parseResponse(done([{ type: 'message', content: [{ text: '料金です' }] }]), allowed).error).toBe('no_function_call')
     expect(router.parseResponse(done([call('demo', { arguments: '{not json' })]), allowed).error).toBe('invalid_json_arguments')
-    expect(router.parseResponse(done([call('demo', { arguments: JSON.stringify({ branch_id: 3 }) })]), allowed).error).toBe('branch_id_not_string')
+    expect(router.parseResponse(done([call('demo', { arguments: JSON.stringify({ branch_id: 3, reason: 'r' }) })]), allowed).error).toBe('branch_id_not_string')
     expect(router.parseResponse(done([call('demo', { name: 'run_shell' })]), allowed).error).toBe('unknown_function')
+    // extra keys ("execute": true) and bad reasons are rejected, as in the original MVP
+    expect(router.parseResponse(done([call('demo', { arguments: JSON.stringify({ branch_id: 'demo', reason: 'x', execute: true }) })]), allowed).error).toBe('unexpected_argument_keys')
+    for (const reason of [null, '', 'x'.repeat(201)]) expect(router.parseResponse(done([call('demo', { arguments: JSON.stringify({ branch_id: 'demo', reason }) })]), allowed).error).toBe('invalid_reason')
     expect(router.parseResponse(done([call('demo')], 'failed'), allowed).error.startsWith('status:failed')).toBe(true)
     expect(router.parseResponse(done([call('demo')], 'cancelled'), allowed).error.startsWith('status:cancelled')).toBe(true)
   })
