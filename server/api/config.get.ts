@@ -2,6 +2,7 @@ import { defineEventHandler } from 'h3'
 import { FIXED_RULES, SAMPLE_INSTRUCTION, STYLE_PRESETS, effectiveTtsFormat, effectiveTtsModels, effectiveTtsVoices } from '../lib/config'
 import { METRIC_DEFINITIONS } from '../lib/metrics'
 import { RUNTIME_BOUNDS, defaultRuntime } from '../lib/realtimeSession'
+import { CALL_DIRECTION_LABELS, DEFAULT_CALL_DIRECTION, IMPLEMENTED_CALL_DIRECTIONS, PLANNED_CALL_DIRECTIONS } from '../lib/scenarioSchema'
 import { services } from '../lib/services'
 
 export default defineEventHandler(() => {
@@ -18,6 +19,12 @@ export default defineEventHandler(() => {
       styles: Object.entries(STYLE_PRESETS).map(([id, text]) => ({ id, text })),
     },
     limits: { max_depth: s.maxDepthLimit, max_nodes: s.maxNodesLimit, max_branches: s.maxBranchesLimit },
+    call_directions: {
+      default: DEFAULT_CALL_DIRECTION,
+      implemented: IMPLEMENTED_CALL_DIRECTIONS,
+      planned: PLANNED_CALL_DIRECTIONS,
+      labels: CALL_DIRECTION_LABELS,
+    },
     runtime_defaults: defaultRuntime(),
     runtime_bounds: RUNTIME_BOUNDS,
     sample_instruction: SAMPLE_INSTRUCTION,

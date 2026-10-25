@@ -29,6 +29,20 @@ const MAX_DESC = 300
 const id = z.string().regex(ID_PATTERN)
 const trimmed = (max: number, min = 1) => z.string().trim().min(min).max(max)
 
+/**
+ * Step 1 — call direction layer. `inbound` (the other party called us) is the
+ * only direction implemented in the MVP; `outbound` (we place the call) is a
+ * planned feature that already has a seat in the schema / API / UI so adding it
+ * later does not change the Step 2 graph format. Enforcement lives in
+ * scenarioValidator (direction_not_implemented) and the generate endpoint.
+ */
+export const CallDirection = z.enum(['inbound', 'outbound'])
+export type CallDirection = z.infer<typeof CallDirection>
+export const DEFAULT_CALL_DIRECTION: CallDirection = 'inbound'
+export const IMPLEMENTED_CALL_DIRECTIONS: readonly CallDirection[] = ['inbound']
+export const PLANNED_CALL_DIRECTIONS: readonly CallDirection[] = ['outbound']
+export const CALL_DIRECTION_LABELS: Record<CallDirection, string> = { inbound: '着信（相手からの電話に応答）', outbound: '架電（こちらから発信。実装予定）' }
+
 export const EdgeKind = z.enum(['normal', 'confirm', 'deny', 'correction'])
 export const ControlKind = z.enum(['clarify', 'no_input', 'limit', 'end_request'])
 export const ControlAction = z.enum(['RETURN_TO_ORIGIN', 'END', 'GOTO_FIXED_NODE'])
@@ -84,6 +98,7 @@ export const PolicySchema = z
 export const GeneratedScenarioSchema = z
   .object({
     title: trimmed(80),
+    call_direction: CallDirection.default(DEFAULT_CALL_DIRECTION).describe('Step1 の通話方向。依頼で指定された値をそのまま入れる（inbound=着信, outbound=架電）'),
     entry_node_id: id,
     nodes: z.array(NodeSchema).min(1).max(40),
     control_nodes: z.array(ControlNodeSchema).min(1).max(12),
@@ -110,7 +125,7 @@ export type Policy = z.infer<typeof PolicySchema>
 export type GeneratedScenario = z.infer<typeof GeneratedScenarioSchema>
 export type Scenario = z.infer<typeof ScenarioSchema>
 
-export const GENERATED_KEYS = ['title', 'entry_node_id', 'nodes', 'control_nodes', 'policy', 'design_notes'] as const
+export const GENERATED_KEYS = ['title', 'call_direction', 'entry_node_id', 'nodes', 'control_nodes', 'policy', 'design_notes'] as const
 
 export function makeScenario(body: GeneratedScenario, meta: { scenario_id: string; version: number; source_instruction?: string; source_facts?: string; constraints?: string[] }): Scenario {
   return ScenarioSchema.parse({

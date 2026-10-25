@@ -4,8 +4,8 @@
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/api/config` | Provider（MOCK か実 API か）、許可された音声設定、上限値、指標の測定境界 |
-| POST | `/api/scenarios/generate` | 応対方針 → 非同期生成ジョブ。`{job_id, mock}` |
+| GET | `/api/config` | Provider（MOCK か実 API か）、許可された音声設定、上限値、通話方向（`call_directions.implemented` / `planned`）、指標の測定境界 |
+| POST | `/api/scenarios/generate` | 応対方針 → 非同期生成ジョブ。`{job_id, mock}`。`call_direction`（Step1: `inbound` 既定。`outbound` は実装予定で 400） |
 | GET | `/api/jobs/{job_id}` | ジョブの状態・進捗・usage・失敗理由 |
 | POST | `/api/jobs/{job_id}/cancel` | ジョブ取消 |
 | GET | `/api/scenarios` / `/api/scenarios/{id}/versions` | 一覧 |

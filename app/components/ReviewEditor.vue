@@ -5,7 +5,7 @@ import { api } from '~/composables/useApi'
 const props = defineProps<{ scenarioId: string; row: any; versions: any[]; voice: any }>()
 const emit = defineEmits<{ selectVersion: [ver: number]; saved: [ver: number]; approved: [r: { job_id: string }] }>()
 
-const KEYS = ['title', 'entry_node_id', 'nodes', 'control_nodes', 'policy', 'design_notes']
+const KEYS = ['title', 'call_direction', 'entry_node_id', 'nodes', 'control_nodes', 'policy', 'design_notes']
 const draft = ref<any>(null)
 const validation = ref<any>(null)
 const status = ref('')
@@ -82,6 +82,7 @@ function applyRaw() {
       </label>
       <span id="versionStatus" class="tag">{{ row.status }}</span>
       <span class="tag">{{ row.is_mock_generated ? 'MOCK生成' : row.generator === 'edit' ? '手動編集' : 'Claude生成' }}</span>
+      <span id="reviewDirection" class="tag">Step1: {{ draft?.call_direction ?? row.scenario.call_direction ?? '未設定（inbound 扱い）' }}</span>
     </div>
     <div id="validationBox" class="validation" v-if="validation">
       <div :class="validation.ok ? 'ok' : 'e'">{{ validation.ok ? 'グラフ検証: 合格' : `グラフ検証: エラー ${validation.errors.length} 件` }}</div>

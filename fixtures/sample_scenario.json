@@ -1,5 +1,6 @@
 {
   "title": "問い合わせ受付（料金・デモ・操作サポート）",
+  "call_direction": "inbound",
   "entry_node_id": "select_need",
   "design_notes": "用件選択→内容確認→終了の2段構成。確認で否定・訂正された場合のみ用件選択へ戻る（訂正分岐）。具体額や予約完了は発話しない。",
   "nodes": [

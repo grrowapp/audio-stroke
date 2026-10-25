@@ -4,7 +4,7 @@
  * a scenario "safe" by themselves: factual correctness of free text cannot be
  * guaranteed by code, so human review is always required.
  */
-import { CONTROL_BRANCH_PREFIX, type GeneratedScenario, type Scenario } from './scenarioSchema'
+import { CONTROL_BRANCH_PREFIX, IMPLEMENTED_CALL_DIRECTIONS, type GeneratedScenario, type Scenario } from './scenarioSchema'
 
 export interface Limits {
   max_depth: number
@@ -64,6 +64,11 @@ export function validateScenario(scenario: GeneratedScenario | Scenario, limitsI
   const err = (code: string, message: string, path = '') => errors.push({ code, message, path })
   const warn = (code: string, message: string, path = '') => warnings.push({ code, message, path })
   const sourceFacts = sourceFactsIn || ('source_facts' in scenario ? (scenario as Scenario).source_facts : '')
+
+  // ---- Step 1: call direction (MVP implements inbound only)
+  if (!IMPLEMENTED_CALL_DIRECTIONS.includes(scenario.call_direction)) {
+    err('direction_not_implemented', `通話方向 ${scenario.call_direction} は未実装です（実装予定）。MVP では inbound（着信）のみ使えます`, 'call_direction')
+  }
 
   const mainIds = scenario.nodes.map((n) => n.id)
   const ctrlIds = scenario.control_nodes.map((c) => c.id)

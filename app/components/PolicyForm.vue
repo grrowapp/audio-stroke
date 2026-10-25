@@ -6,7 +6,13 @@ const props = defineProps<{ config: any; voice: any }>()
 const emit = defineEmits<{ generated: [result: any] }>()
 const status = defineModel<string>('status', { default: '' })
 
-const form = reactive({ instruction: '', facts: '', prohibitions: '', first_utterance: '', max_depth: 4, max_nodes: 20, max_branches: 4 })
+const form = reactive({ call_direction: props.config.call_directions?.default ?? 'inbound', instruction: '', facts: '', prohibitions: '', first_utterance: '', max_depth: 4, max_nodes: 20, max_branches: 4 })
+const directionOptions = () => {
+  const cd = props.config.call_directions
+  if (!cd) return [{ value: 'inbound', label: 'inbound', disabled: false }]
+  return [...cd.implemented.map((d: string) => ({ value: d, label: `${d}：${cd.labels[d]}`, disabled: false })),
+    ...cd.planned.map((d: string) => ({ value: d, label: `${d}：${cd.labels[d]}`, disabled: true }))]
+}
 const busy = ref(false)
 
 async function generate() {
@@ -34,6 +40,8 @@ async function generate() {
 <template>
   <section id="secInput">
     <h2>1. 応対方針の入力</h2>
+    <label>通話方向（Step1）<select id="inDirection" v-model="form.call_direction"><option v-for="o in directionOptions()" :key="o.value" :value="o.value" :disabled="o.disabled">{{ o.label }}</option></select></label>
+    <p class="hint">Step1 で着信/架電を分け、Step2（以下の方針から生成する分岐スクリプト）で最初の発話への相手の返答ごとに分岐します。MVP は着信のみ。架電は実装予定です。</p>
     <label>応対目的・指示（必須）<textarea id="inInstruction" v-model="form.instruction" rows="4" maxlength="4000" /></label>
     <button id="btnSample" type="button" class="secondary" @click="form.instruction = config.sample_instruction">サンプル指示を入れる</button>
     <label>利用可能な事実・商品情報・FAQ（任意。ここに無い事実は発話させません）<textarea v-model="form.facts" rows="3" maxlength="8000" /></label>

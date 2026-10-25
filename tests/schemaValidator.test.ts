@@ -96,6 +96,17 @@ describe('schema + validator', () => {
     expect(keys).toHaveLength(13)
   })
 
+  it('Step1 call direction: defaults to inbound, outbound is rejected as not implemented', () => {
+    const noDir = sampleBody(); delete noDir.call_direction
+    expect(GeneratedScenarioSchema.parse(noDir).call_direction).toBe('inbound')
+    expect(v(sampleBody()).ok).toBe(true)
+    const r = v({ ...sampleBody(), call_direction: 'outbound' })
+    expect(r.ok).toBe(false); expect(codes(r)).toEqual(new Set(['direction_not_implemented']))
+    expect(() => GeneratedScenarioSchema.parse({ ...sampleBody(), call_direction: 'sideways' })).toThrow()
+    const s = generationJsonSchema() as any
+    expect(s.properties.call_direction.enum).toEqual(['inbound', 'outbound']); expect(s.required).toContain('call_direction')
+  })
+
   it('generation schema is strict and inlined', () => {
     const s = generationJsonSchema() as any
     const txt = JSON.stringify(s)

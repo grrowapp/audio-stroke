@@ -58,6 +58,20 @@ describe('Claude scenario generator', () => {
     expect(c.calls[1].messages).toHaveLength(1)
   })
 
+  it('Step1 direction: prompt carries it, mismatching output is repaired, mock echoes the request', async () => {
+    expect(buildSystemPrompt(REQ)).toContain('通話方向は inbound')
+    expect(buildSystemPrompt(defaultRequest({ instruction: 'x', call_direction: 'outbound' }))).toContain('通話方向は outbound')
+    const wrong = sampleBody(); wrong.call_direction = 'outbound'
+    const { g, c } = make([wrong, sampleBody()])
+    const out = await g.generate(REQ)
+    expect(out.repairs).toBe(1); expect(out.scenario.call_direction).toBe('inbound')
+    expect(c.calls[0].messages[0].content).toContain('<call_direction>\ninbound')
+    expect(c.calls[1].messages[0].content).toContain('direction_mismatch')
+    const m = new MockScenarioGenerator(tmpSettings(), null, 0)
+    expect((await m.generate(REQ)).scenario.call_direction).toBe('inbound')
+    await expect(m.generate(defaultRequest({ instruction: 'x', call_direction: 'outbound' }))).rejects.toMatchObject({ code: 'invalid_after_repairs' })
+  })
+
   it('repair limit is two', async () => {
     const broken = sampleBody(); broken.nodes[0].edges[0].target_node_id = 'nowhere'
     const { g, c } = make([broken, broken, broken, sampleBody()])

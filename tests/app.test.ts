@@ -156,7 +156,7 @@ describe('HTTP API', () => {
     expect((await req('POST', `/api/scenarios/${sid}/versions/1/approve`, { voice: { ...(await voice()), voice: 'alloy' }, confirm_reviewed: true })).status).toBe(400)
 
     const sc = row.scenario
-    const body: any = Object.fromEntries(['title', 'entry_node_id', 'nodes', 'control_nodes', 'policy', 'design_notes'].map((k) => [k, sc[k]]))
+    const body: any = Object.fromEntries(['title', 'call_direction', 'entry_node_id', 'nodes', 'control_nodes', 'policy', 'design_notes'].map((k) => [k, sc[k]]))
     body.nodes[1].assistant_text = '料金のご案内ですね。月額3,000円です。'
     const v2 = await req('POST', `/api/scenarios/${sid}/versions`, { base_version: 1, scenario: body })
     expect(v2.status).toBe(200); expect(v2.json.version).toBe(2); expect(v2.json.validation.ok).toBe(false)
