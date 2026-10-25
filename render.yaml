@@ -1,8 +1,9 @@
 # Render Blueprint — hosted VERIFICATION environment (free instance).
 # Free instances spin down after 15 min without traffic and have no persistent
 # disk: SQLite + generated audio under data/ are lost on every spin-down or
-# deploy (regenerate the scenario audio after a restart). Paid API keys are
-# behind Basic auth; set the `sync: false` values in the Render dashboard.
+# deploy (regenerate the scenario audio after a restart). No auth gate by
+# request: keep the URL private and suspend the service after verification.
+# Set the `sync: false` values in the Render dashboard.
 services:
   - type: web
     name: audio-stroke-mvp
@@ -41,8 +42,4 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: OPENAI_API_KEY
-        sync: false
-      - key: BASIC_AUTH_USER
-        sync: false
-      - key: BASIC_AUTH_PASSWORD
         sync: false

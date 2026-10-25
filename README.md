@@ -36,13 +36,14 @@ npm run dev               # http://127.0.0.1:8000（開発）
 `render.yaml`（Blueprint）同梱。無料インスタンスの制約: 15 分無通信でスピンダウン（復帰に約 1 分）、永続ディスク無し（`data/` の SQLite と生成音声は再起動・再デプロイで消える → 再生成）、月 750 時間。
 
 1. Render で **New → Blueprint** → このリポジトリの `mvp` ブランチを選択（`render.yaml` を読む）
-2. 作成時に `sync: false` の値を入力: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD`
-3. デプロイ後 `https://<service>.onrender.com/` を開く → Basic 認証ダイアログに 2 の値を入力
+2. 作成時に `sync: false` の値を入力: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+3. デプロイ後 `https://<service>.onrender.com/` を開く
 4. 以降は手元と同じ（生成 → 承認・音声生成 → 会話開始）。HTTPS なのでマイクはそのまま使える
+
+**認証は無し**（検証用の判断）。URL を知る誰でも有料 API を実行できるので、URL は共有せず、検証が終わったらサービスを Suspend する。必要なら `BASIC_AUTH_USER` + `BASIC_AUTH_PASSWORD` を環境変数に足すだけで `/healthz` 以外が Basic 認証必須になる（WebSocket は認証成功時の HttpOnly cookie で通る）。
 
 仕組み:
 - `RENDER_EXTERNAL_HOSTNAME`（Render が自動設定）を Host / Origin の許可に加える。他ホストで動かす場合は `PUBLIC_HOSTNAME`
-- `BASIC_AUTH_USER` + `BASIC_AUTH_PASSWORD` で `/healthz` 以外を Basic 認証必須にする（有料 API を叩く画面なので必須）。成功時の HttpOnly cookie で WebSocket も通す
 - Node は `.node-version`（24.16.0）で固定（`node:sqlite` に 22.13 以降が必要）
 - Realtime の分類は OpenAI（米国）往復、ブラウザ⇄サーバーは Singapore 往復が加わる。遅延指標はその分を含む
 
