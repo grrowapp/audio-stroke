@@ -1,9 +1,12 @@
 # API / イベント仕様メモ（Nuxt 4 / Nitro 版）
 
-## HTTP API（すべて 127.0.0.1 のみ。更新系は同一 Origin + `application/json` 必須）
+## HTTP API（既定は 127.0.0.1 のみ。更新系は同一 Origin + `application/json` 必須）
+
+ホスト公開時: `PUBLIC_HOSTNAME`（Render では `RENDER_EXTERNAL_HOSTNAME` を自動採用）を Host / Origin（http・https）の許可に加える。`BASIC_AUTH_USER` + `BASIC_AUTH_PASSWORD` を設定すると `/healthz` 以外の全パス（WS の upgrade 含む）が Basic 認証必須になり、認証成功時に HttpOnly cookie `mvp_auth` を発行する（WS upgrade はこの cookie で通る）。
 
 | メソッド | パス | 内容 |
 |---|---|---|
+| GET | `/healthz` | 死活確認 `{ok:true}`（Basic 認証の対象外。Host 検証は適用） |
 | GET | `/api/config` | Provider（MOCK か実 API か）、許可された音声設定、上限値、通話方向（`call_directions.implemented` / `planned`）、指標の測定境界 |
 | POST | `/api/scenarios/generate` | 応対方針 → 非同期生成ジョブ。`{job_id, mock}`。`call_direction`（Step1: `inbound` 既定。`outbound` は実装予定で 400） |
 | GET | `/api/jobs/{job_id}` | ジョブの状態・進捗・usage・失敗理由 |

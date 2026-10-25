@@ -50,7 +50,8 @@ export function createServices(o: ServiceOverrides = {}): Services {
       ? new OpenAIRealtimeTransport(settings.realtimeUrl, settings.realtimeModel, settings.openaiApiKey)
       : new MockRealtimeTransport())
   const hosts = new Set([`127.0.0.1:${settings.port}`, `localhost:${settings.port}`, ...(o.extraAllowedHosts ?? [])])
-  const origins = new Set([...hosts].map((h) => `http://${h}`))
+  // Behind a TLS-terminating platform proxy the browser origin is https://<public host>.
+  const origins = new Set([...hosts].flatMap((h) => [`http://${h}`, `https://${h}`]))
   return { settings, store, audio, jobs, generator, synthesizer, transportFactory, engines: new Map(), recovered, allowedHosts: hosts, allowedOrigins: origins }
 }
 
@@ -60,7 +61,9 @@ let instance: Services | null = null
 export function services(): Services {
   if (!instance) {
     loadDotenv(path.resolve(process.cwd(), '.env'))
-    instance = createServices({ extraAllowedHosts: (process.env.EXTRA_ALLOWED_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean) })
+    // PUBLIC_HOSTNAME: generic; RENDER_EXTERNAL_HOSTNAME: set automatically by Render web services.
+    const publicHosts = [process.env.PUBLIC_HOSTNAME, process.env.RENDER_EXTERNAL_HOSTNAME].map((s) => (s ?? '').trim()).filter(Boolean)
+    instance = createServices({ extraAllowedHosts: [...(process.env.EXTRA_ALLOWED_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean), ...publicHosts] })
   }
   return instance
 }

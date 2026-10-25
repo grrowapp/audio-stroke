@@ -1,0 +1,48 @@
+# Render Blueprint — hosted VERIFICATION environment (free instance).
+# Free instances spin down after 15 min without traffic and have no persistent
+# disk: SQLite + generated audio under data/ are lost on every spin-down or
+# deploy (regenerate the scenario audio after a restart). Paid API keys are
+# behind Basic auth; set the `sync: false` values in the Render dashboard.
+services:
+  - type: web
+    name: audio-stroke-mvp
+    runtime: node
+    plan: free
+    region: singapore
+    branch: mvp
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NITRO_HOST
+        value: 0.0.0.0
+      # Render sets PORT (default 10000) and RENDER_EXTERNAL_HOSTNAME; the server allows that Host automatically.
+      - key: SCENARIO_PROVIDER
+        value: claude
+      - key: TTS_PROVIDER
+        value: openai
+      - key: REALTIME_PROVIDER
+        value: openai
+      - key: CLAUDE_SCENARIO_MODEL
+        value: claude-opus-4-8
+      - key: CLAUDE_REFUSAL_FALLBACK
+        value: default
+      - key: TTS_MODEL
+        value: gpt-4o-mini-tts
+      - key: TTS_VOICE
+        value: marin
+      - key: REALTIME_MODEL
+        value: gpt-realtime-2.1
+      - key: MAX_CONCURRENT_SESSIONS
+        value: "1"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASSWORD
+        sync: false

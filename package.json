@@ -1,6 +1,9 @@
 {
   "name": "realtime-branch-mvp",
   "private": true,
+  "engines": {
+    "node": ">=22.13 <25"
+  },
   "type": "module",
   "scripts": {
     "dev": "nuxt dev --host 127.0.0.1 --port 8000",

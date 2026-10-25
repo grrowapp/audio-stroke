@@ -29,7 +29,22 @@ npm run dev               # http://127.0.0.1:8000（開発）
 
 - Node.js 22.13 以降（`node:sqlite` を使用。起動時に ExperimentalWarning が出ます）。
 - 単一プロセス前提（SQLite `data/mvp.sqlite3` + `data/audio/`）。再起動時、実行中だったジョブは `interrupted`、音声生成中の版は `AUDIO_FAILED`、使用中セッションは `aborted` に回収します。
-- Host / Origin 検証により `127.0.0.1:PORT` と `localhost:PORT` 以外からのアクセスは拒否します。**共有サービスではありません**。公開するには認証・権限制御・利用量制限が別途必要です。
+- Host / Origin 検証により `127.0.0.1:PORT` と `localhost:PORT` 以外からのアクセスは拒否します。**共有サービスではありません**。公開するには認証・権限制御・利用量制限が別途必要です（検証用の最小構成は次節）。
+
+### 検証環境を Render（無料）に置く
+
+`render.yaml`（Blueprint）同梱。無料インスタンスの制約: 15 分無通信でスピンダウン（復帰に約 1 分）、永続ディスク無し（`data/` の SQLite と生成音声は再起動・再デプロイで消える → 再生成）、月 750 時間。
+
+1. Render で **New → Blueprint** → このリポジトリの `mvp` ブランチを選択（`render.yaml` を読む）
+2. 作成時に `sync: false` の値を入力: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD`
+3. デプロイ後 `https://<service>.onrender.com/` を開く → Basic 認証ダイアログに 2 の値を入力
+4. 以降は手元と同じ（生成 → 承認・音声生成 → 会話開始）。HTTPS なのでマイクはそのまま使える
+
+仕組み:
+- `RENDER_EXTERNAL_HOSTNAME`（Render が自動設定）を Host / Origin の許可に加える。他ホストで動かす場合は `PUBLIC_HOSTNAME`
+- `BASIC_AUTH_USER` + `BASIC_AUTH_PASSWORD` で `/healthz` 以外を Basic 認証必須にする（有料 API を叩く画面なので必須）。成功時の HttpOnly cookie で WebSocket も通す
+- Node は `.node-version`（24.16.0）で固定（`node:sqlite` に 22.13 以降が必要）
+- Realtime の分類は OpenAI（米国）往復、ブラウザ⇄サーバーは Singapore 往復が加わる。遅延指標はその分を含む
 
 ### MOCK と実 API
 

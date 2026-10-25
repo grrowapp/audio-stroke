@@ -295,3 +295,80 @@ describe('WebSocket E2E (mock Realtime)', () => {
     ws.close()
   })
 })
+
+describe('Basic auth gate + public host (hosted verification)', () => {
+  const PORT2 = PORT + 1
+  const BASE2 = `http://127.0.0.1:${PORT2}`
+  const PUB = 'pub.example'
+  const CREDS = 'Basic ' + Buffer.from('tester:secret pw').toString('base64')
+  let proc2: ChildProcess | null = null
+  let dir2 = ''
+  let cookie = ''
+
+  const raw = (opts: { path: string; method?: string; headers?: Record<string, string>; body?: string }) => new Promise<{ status: number; headers: http.IncomingHttpHeaders; text: string }>((res, rej) => {
+    const r = http.request({ host: '127.0.0.1', port: PORT2, path: opts.path, method: opts.method ?? 'GET', headers: opts.headers ?? {} }, (resp) => {
+      let text = ''
+      resp.on('data', (d) => (text += d)); resp.on('end', () => res({ status: resp.statusCode ?? 0, headers: resp.headers, text }))
+    })
+    r.on('error', rej); if (opts.body) r.write(opts.body); r.end()
+  })
+  const upgradeStatus = (headers: Record<string, string>) => new Promise<number>((res) => {
+    const w = new WebSocket(`ws://127.0.0.1:${PORT2}/ws?session_id=sess_00000000000000000000`, { headers })
+    w.on('unexpected-response', (_q, r) => { res(r.statusCode ?? 0); w.terminate() })
+    w.on('open', () => { res(101); w.close() })
+    w.on('error', () => res(-1))
+  })
+
+  beforeAll(async () => {
+    dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'rbmvp-auth-'))
+    proc2 = spawn('node', [path.join(ROOT, '.output/server/index.mjs')], {
+      env: { ...process.env, PORT: String(PORT2), HOST: '127.0.0.1', DATA_DIR: dir2, SCENARIO_PROVIDER: 'mock', TTS_PROVIDER: 'mock', REALTIME_PROVIDER: 'mock', NITRO_PORT: String(PORT2), NITRO_HOST: '127.0.0.1', BASIC_AUTH_USER: 'tester', BASIC_AUTH_PASSWORD: 'secret pw', PUBLIC_HOSTNAME: PUB },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let out = ''
+    proc2.stdout?.on('data', (d) => (out += d)); proc2.stderr?.on('data', (d) => (out += d))
+    const end = Date.now() + 20000
+    while (Date.now() < end) {
+      try { if ((await fetch(BASE2 + '/healthz')).ok) return } catch { /* not up yet */ }
+      await sleep(200)
+    }
+    throw new Error('auth server did not start: ' + out)
+  }, 30000)
+
+  afterAll(() => { proc2?.kill() })
+
+  it('health check is open; everything else needs credentials', async () => {
+    expect((await raw({ path: '/healthz', headers: { host: `127.0.0.1:${PORT2}` } })).status).toBe(200)
+    const r = await raw({ path: '/api/config', headers: { host: `127.0.0.1:${PORT2}` } })
+    expect(r.status).toBe(401); expect(r.headers['www-authenticate']).toMatch(/^Basic/)
+    expect((await raw({ path: '/', headers: { host: `127.0.0.1:${PORT2}` } })).status).toBe(401)
+    expect((await raw({ path: '/api/config', headers: { host: `127.0.0.1:${PORT2}`, authorization: 'Basic ' + Buffer.from('tester:nope').toString('base64') } })).status).toBe(401)
+  })
+
+  it('Basic credentials set an HttpOnly cookie that works on its own', async () => {
+    const r = await raw({ path: '/api/config', headers: { host: `127.0.0.1:${PORT2}`, authorization: CREDS } })
+    expect(r.status).toBe(200)
+    const sc = ([] as string[]).concat(r.headers['set-cookie'] ?? []).find((c) => c.startsWith('mvp_auth=')) ?? ''
+    expect(sc).toMatch(/HttpOnly/i); expect(sc).toMatch(/SameSite=Strict/i); expect(sc).not.toMatch(/Secure/i)
+    cookie = sc.split(';')[0]!
+    expect((await raw({ path: '/api/config', headers: { host: `127.0.0.1:${PORT2}`, cookie } })).status).toBe(200)
+    expect((await raw({ path: '/api/config', headers: { host: `127.0.0.1:${PORT2}`, cookie: 'mvp_auth=deadbeef' } })).status).toBe(401)
+    const https = await raw({ path: '/api/config', headers: { host: `127.0.0.1:${PORT2}`, authorization: CREDS, 'x-forwarded-proto': 'https' } })
+    expect(([] as string[]).concat(https.headers['set-cookie'] ?? []).join(';')).toMatch(/Secure/i)
+  })
+
+  it('public hostname is accepted with an https origin; other hosts are not', async () => {
+    expect((await raw({ path: '/api/config', headers: { host: PUB, cookie } })).status).toBe(200)
+    expect((await raw({ path: '/api/config', headers: { host: 'evil.example', cookie } })).status).toBe(421)
+    const body = JSON.stringify({ instruction: 'x' })
+    const ok = await raw({ path: '/api/scenarios/generate', method: 'POST', body, headers: { host: PUB, cookie, origin: `https://${PUB}`, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(body)) } })
+    expect(ok.status).toBe(200)
+    const bad = await raw({ path: '/api/scenarios/generate', method: 'POST', body, headers: { host: PUB, cookie, origin: 'https://evil.example', 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(body)) } })
+    expect(bad.status).toBe(403)
+  })
+
+  it('WebSocket upgrade requires the cookie (401 before the session lookup)', async () => {
+    expect(await upgradeStatus({ origin: BASE2 })).toBe(401)
+    expect(await upgradeStatus({ origin: BASE2, cookie })).toBe(404)
+  })
+})

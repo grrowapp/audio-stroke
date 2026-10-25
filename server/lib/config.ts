@@ -97,6 +97,9 @@ export interface Settings {
   maxOpenaiSendBufferBytes: number
   /** Local MVP cost guard: concurrent live conversations. */
   maxConcurrentSessions: number
+  /** Optional Basic auth gate for hosted verification (both must be set to enable). */
+  basicAuthUser: string
+  basicAuthPassword: string
 }
 
 export function loadSettings(overrides: Partial<Settings> = {}): Settings {
@@ -147,6 +150,8 @@ export function loadSettings(overrides: Partial<Settings> = {}): Settings {
     maxWsAudioFrameBytes: 24_000, // 500 ms of PCM16 @ 24 kHz
     maxOpenaiSendBufferBytes: 4_000_000,
     maxConcurrentSessions: envInt('MAX_CONCURRENT_SESSIONS', 1),
+    basicAuthUser: env('BASIC_AUTH_USER'),
+    basicAuthPassword: env('BASIC_AUTH_PASSWORD'),
     ...overrides,
   }
   return s

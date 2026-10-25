@@ -6,6 +6,7 @@
 import { defineWebSocketHandler } from 'h3'
 import type { Peer } from 'crossws'
 import { manifestMissing, type Manifest } from '../lib/audioStore'
+import { checkAuth } from '../lib/auth'
 import { SessionMetrics } from '../lib/metrics'
 import { createEngine } from '../core/factory'
 import { runtimeFromUser } from '../core/runtime'
@@ -28,6 +29,8 @@ export default defineWebSocketHandler({
     const host = request.headers.get('host') ?? ''
     const origin = request.headers.get('origin') ?? ''
     if (!svc.allowedHosts.has(host) || !svc.allowedOrigins.has(origin)) return new Response('forbidden', { status: 403 })
+    // Browsers send cookies (not necessarily the cached Basic header) on the upgrade; the cookie set by 01.auth covers it.
+    if (checkAuth({ authorization: request.headers.get('authorization'), cookie: request.headers.get('cookie') }, svc.settings) === 'unauthorized') return new Response('unauthorized', { status: 401 })
     const sid = new URL(request.url).searchParams.get('session_id') ?? ''
     if (!ID_RE.test(sid) || !svc.store.getSession(sid)) return new Response('not found', { status: 404 })
   },
