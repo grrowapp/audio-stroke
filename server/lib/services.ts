@@ -6,6 +6,7 @@ import path from 'node:path'
 import { AudioStore } from './audioStore'
 import { ensureDirs, dbPath, loadDotenv, loadSettings, type Settings } from './config'
 import { JobManager } from './jobs'
+import { configureLexicon, type Lexicon } from './lexicon'
 import type { Engine } from '../core/types'
 import type { RealtimeTransport } from './realtimeSession'
 import { MockRealtimeTransport, OpenAIRealtimeTransport } from './realtimeSession'
@@ -25,6 +26,7 @@ export interface Services {
   recovered: { jobs: number; versions: number; sessions: number }
   allowedHosts: Set<string>
   allowedOrigins: Set<string>
+  lexicon: Lexicon
 }
 
 export interface ServiceOverrides {
@@ -38,6 +40,7 @@ export interface ServiceOverrides {
 export function createServices(o: ServiceOverrides = {}): Services {
   const settings = loadSettings(o.settings)
   ensureDirs(settings)
+  const lexicon = configureLexicon({ extraPath: settings.lexiconPath || undefined })
   const store = new Store(dbPath(settings))
   const recovered = store.recoverAfterRestart()
   const audio = new AudioStore(path.join(settings.dataDir, 'audio'), store)
@@ -52,7 +55,7 @@ export function createServices(o: ServiceOverrides = {}): Services {
   const hosts = new Set([`127.0.0.1:${settings.port}`, `localhost:${settings.port}`, ...(o.extraAllowedHosts ?? [])])
   // Behind a TLS-terminating platform proxy the browser origin is https://<public host>.
   const origins = new Set([...hosts].flatMap((h) => [`http://${h}`, `https://${h}`]))
-  return { settings, store, audio, jobs, generator, synthesizer, transportFactory, engines: new Map(), recovered, allowedHosts: hosts, allowedOrigins: origins }
+  return { settings, store, audio, jobs, generator, synthesizer, transportFactory, engines: new Map(), recovered, allowedHosts: hosts, allowedOrigins: origins, lexicon }
 }
 
 let instance: Services | null = null

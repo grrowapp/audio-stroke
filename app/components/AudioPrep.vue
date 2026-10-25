@@ -59,7 +59,7 @@ function play(audioId: string) {
       <thead><tr><th>発話</th><th>文</th><th>状態</th><th>長さ</th><th>確認</th></tr></thead>
       <tbody>
         <tr v-for="e in Object.values(manifest.entries) as any[]" :key="e.utterance_key">
-          <td>{{ e.utterance_key }}</td><td>{{ e.text }}</td>
+          <td>{{ e.utterance_key }}</td><td>{{ e.text }}<span v-if="e.tts_text && e.tts_text !== e.text" class="hint"><br>読み替え後: {{ e.tts_text }}</span></td>
           <td>{{ e.status }}{{ e.cache_hit ? '（キャッシュ）' : '' }}{{ e.error ? '：' + e.error : '' }}</td>
           <td>{{ e.duration_ms ? (e.duration_ms / 1000).toFixed(1) + 's' : '' }}</td>
           <td><button type="button" class="secondary" :disabled="e.status !== 'ready'" @click="play(e.audio_id)">再生</button></td>

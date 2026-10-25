@@ -7,6 +7,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { applyReadings, getLexicon, type Lexicon } from './lexicon'
 import type { Scenario } from './scenarioSchema'
 import type { AssetRow, Store } from './scenarioStore'
 import { reachableUtterances } from './scenarioValidator'
@@ -28,7 +29,10 @@ export function cacheKey(vs: VoiceSettings, text: string): string {
 export interface ManifestEntry {
   utterance_key: string
   kind: 'node' | 'control'
+  /** Displayed / logged text (what the reviewer approved). */
   text: string
+  /** Text actually sent to the TTS after the reading lexicon; equals `text` when nothing applied. The cache key is derived from this. */
+  tts_text: string
   audio_id: string
   status: 'ready' | 'pending' | 'generating' | 'failed'
   cache_hit: boolean
@@ -111,13 +115,14 @@ export class AudioStore {
   }
 }
 
-export function buildManifest(scenario: Scenario, vs: VoiceSettings, audio: AudioStore): Manifest {
+export function buildManifest(scenario: Scenario, vs: VoiceSettings, audio: AudioStore, lexicon: Lexicon = getLexicon()): Manifest {
   const entries: Record<string, ManifestEntry> = {}
   for (const { key, kind, text } of reachableUtterances(scenario)) {
-    const aid = cacheKey(vs, text)
+    const ttsText = applyReadings(text, lexicon).text
+    const aid = cacheKey(vs, ttsText)
     const a = audio.readyAsset(aid)
     entries[key] = {
-      utterance_key: key, kind, text, audio_id: aid, status: a ? 'ready' : 'pending', cache_hit: !!a,
+      utterance_key: key, kind, text, tts_text: ttsText, audio_id: aid, status: a ? 'ready' : 'pending', cache_hit: !!a,
       mime: a?.mime ?? null, byte_length: a?.byte_length ?? null, content_sha256: a?.content_sha256 ?? null,
       duration_ms: a?.duration_ms ?? null, error: null,
     }

@@ -1,13 +1,15 @@
 import { defineEventHandler } from 'h3'
 import { FIXED_RULES, SAMPLE_INSTRUCTION, STYLE_PRESETS, effectiveTtsFormat, effectiveTtsModels, effectiveTtsVoices } from '../lib/config'
+import { lexiconSummary } from '../lib/lexicon'
 import { METRIC_DEFINITIONS } from '../lib/metrics'
 import { RUNTIME_BOUNDS, defaultRuntime } from '../lib/realtimeSession'
 import { CALL_DIRECTION_LABELS, DEFAULT_CALL_DIRECTION, IMPLEMENTED_CALL_DIRECTIONS, PLANNED_CALL_DIRECTIONS } from '../lib/scenarioSchema'
 import { services } from '../lib/services'
 
 export default defineEventHandler(() => {
-  const { settings: s, generator, synthesizer, recovered } = services()
+  const { settings: s, generator, synthesizer, recovered, lexicon } = services()
   return {
+    lexicon: lexiconSummary(lexicon),
     providers: {
       scenario: { name: generator.name, mock: generator.isMock, model: generator.model },
       tts: { name: synthesizer.name, mock: synthesizer.isMock },

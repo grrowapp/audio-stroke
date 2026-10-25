@@ -4,6 +4,7 @@
  * a scenario "safe" by themselves: factual correctness of free text cannot be
  * guaranteed by code, so human review is always required.
  */
+import { getLexicon, scanMisreads, type Lexicon } from './lexicon'
 import { CONTROL_BRANCH_PREFIX, IMPLEMENTED_CALL_DIRECTIONS, type GeneratedScenario, type Scenario } from './scenarioSchema'
 
 export interface Limits {
@@ -56,7 +57,7 @@ function normNum(s: string): string {
   return out.replace(/[\s,]/g, '')
 }
 
-export function validateScenario(scenario: GeneratedScenario | Scenario, limitsIn?: Partial<Limits>, sourceFactsIn = ''): ValidationResult {
+export function validateScenario(scenario: GeneratedScenario | Scenario, limitsIn?: Partial<Limits>, sourceFactsIn = '', lexicon: Lexicon = getLexicon()): ValidationResult {
   const limits = defaultLimits(limitsIn)
   const errors: Issue[] = []
   const warnings: Issue[] = []
@@ -218,6 +219,8 @@ export function validateScenario(scenario: GeneratedScenario | Scenario, limitsI
     if (SLOT_RE.test(text)) err('dynamic_slot', `発話文に動的スロット/プレースホルダがあります: 「${text.slice(0, 40)}」`, p)
     for (const m of text.matchAll(MONEY_RE)) if (!factsNorm.includes(normNum(m[0]))) err('unsourced_amount', `資料に無い金額・割合が発話文にあります: ${m[0]}`, p)
     for (const w of PROMISE_WORDS) if (text.includes(w)) warn('possible_promise', `断言・約束の可能性がある表現「${w}」を確認してください`, p)
+    const hits = scanMisreads(text, lexicon)
+    if (hits.length) warn('misread_risk', `音声合成が誤読しやすい語があります（音声化時は読み替え辞書で ${hits.map((h) => `${h.surface}→${h.reading}`).join('、')} に置換）`, p)
   }
 
   stats.nodes = mainIds.length

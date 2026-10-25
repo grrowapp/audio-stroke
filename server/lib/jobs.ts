@@ -96,11 +96,11 @@ export class JobManager {
       for (const [k, e] of Object.entries(manifest.entries)) if (e.status !== 'ready' && old.entries[k]?.status === 'ready') e.status = 'pending' // file vanished; regenerate
     }
     const todo = Object.values(manifest.entries).filter((e) => e.status !== 'ready')
-    const chars = todo.reduce((a, e) => a + e.text.length, 0)
+    const chars = todo.reduce((a, e) => a + (e.tts_text ?? e.text).length, 0)
     const total = Object.keys(manifest.entries).length
     if (total > s.ttsMaxItems) throw new GenerationError('too_many_items', `音声数 ${total} が上限 ${s.ttsMaxItems} を超えています`)
     if (chars > s.ttsMaxTotalChars) throw new GenerationError('too_many_chars', `生成文字数 ${chars} が上限 ${s.ttsMaxTotalChars} を超えています`)
-    for (const e of todo) if (e.text.length > s.ttsMaxCharsPerItem) throw new GenerationError('item_too_long', `${e.utterance_key} の文字数が上限を超えています`)
+    for (const e of todo) if ((e.tts_text ?? e.text).length > s.ttsMaxCharsPerItem) throw new GenerationError('item_too_long', `${e.utterance_key} の文字数が上限を超えています`)
 
     const progress = {
       total, done: total - todo.length, failed: 0,
@@ -123,7 +123,7 @@ export class JobManager {
           signal.addEventListener('abort', onAbort, { once: true })
           let data: Uint8Array
           try {
-            data = await this.synthesizer.synthesize(entry.text, voice, ac.signal)
+            data = await this.synthesizer.synthesize(entry.tts_text ?? entry.text, voice, ac.signal)
           } finally {
             clearTimeout(timer)
             signal.removeEventListener('abort', onAbort)

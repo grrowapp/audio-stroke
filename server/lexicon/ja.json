@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "locale": "ja-JP",
+  "description": "日本語の読み替え辞書 + 誤読しやすい漢字のルール（初期データ）。TTS に渡す文だけを置換し、画面・ログの表示文は変えない。追加は entries に 1 件ずつ。surface は長いものから順に適用される。",
+  "entries": [
+    {
+      "surface": "承っ",
+      "reading": "うけたまわっ",
+      "category": "misread",
+      "note": "gpt-4o-mini-tts が「うやまっ」と誤読（2026-10-25 実機確認）。活用形ごとに surface を用意する"
+    },
+    {
+      "surface": "承り",
+      "reading": "うけたまわり",
+      "category": "misread",
+      "note": "同上（連用形）"
+    },
+    {
+      "surface": "承る",
+      "reading": "うけたまわる",
+      "category": "misread",
+      "note": "同上（終止形・連体形）"
+    },
+    {
+      "surface": "承れ",
+      "reading": "うけたまわれ",
+      "category": "misread",
+      "note": "同上（仮定形・命令形）"
+    }
+  ]
+}

@@ -8,6 +8,7 @@
  */
 import sampleScenario from '../../fixtures/sample_scenario.json'
 import { FIXED_RULES, type Settings } from './config'
+import { getLexicon, misreadGuidance, type Lexicon } from './lexicon'
 import { CALL_DIRECTION_LABELS, DEFAULT_CALL_DIRECTION, GeneratedScenarioSchema, fullJsonSchemaText, generationJsonSchema, type CallDirection, type GeneratedScenario } from './scenarioSchema'
 import { validateScenario, type Limits, type ValidationResult } from './scenarioValidator'
 
@@ -58,8 +59,8 @@ const STEP1_GUIDANCE: Record<CallDirection, string> = {
 - 相手が電話に出た直後の反応（都合が悪い・断り・担当者不在・本人確認）を入口ノードの分岐に含める。`,
 }
 
-export function buildSystemPrompt(req: GenerationRequest): string {
-  const rules = FIXED_RULES.map((r) => `- ${r}`).join('\n')
+export function buildSystemPrompt(req: GenerationRequest, lexicon: Lexicon = getLexicon()): string {
+  const rules = [...FIXED_RULES.map((r) => `- ${r}`), misreadGuidance(lexicon)].filter(Boolean).join('\n')
   return `あなたは電話・音声応対の会話シナリオ設計者です。利用者の応対方針から、有限の「仮説的な会話グラフ」を JSON で設計します。
 このグラフは全ユーザー発話の網羅ではありません。実行時は別の音声分類器が、各ノードで許可された分岐IDの中から意図で選びます。
 

@@ -100,6 +100,8 @@ export interface Settings {
   /** Optional Basic auth gate for hosted verification (both must be set to enable). */
   basicAuthUser: string
   basicAuthPassword: string
+  /** Optional extra reading-lexicon JSON (same format as server/lexicon/ja.json); merged over the bundled one. */
+  lexiconPath: string
 }
 
 export function loadSettings(overrides: Partial<Settings> = {}): Settings {
@@ -152,6 +154,7 @@ export function loadSettings(overrides: Partial<Settings> = {}): Settings {
     maxConcurrentSessions: envInt('MAX_CONCURRENT_SESSIONS', 1),
     basicAuthUser: env('BASIC_AUTH_USER'),
     basicAuthPassword: env('BASIC_AUTH_PASSWORD'),
+    lexiconPath: env('LEXICON_PATH'),
     ...overrides,
   }
   return s
