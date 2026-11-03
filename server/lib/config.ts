@@ -199,6 +199,10 @@ function pick<T extends string>(v: string, allowed: readonly T[], def: T): T {
   return (allowed as readonly string[]).includes(v) ? (v as T) : def
 }
 
+/** Settings with the per-session backend choice applied ('' keeps DECISION_BACKEND). */
+export const withDecisionBackend = (s: Settings, choice: string): Settings =>
+  choice === 'realtime' || choice === 'stt_judge' || choice === 'mock' ? { ...s, decisionBackend: choice } : s
+
 /** True when the configured decision backend understands no audio (mock Realtime, or mock STT + mock judge). */
 export const decisionIsMock = (s: Settings): boolean =>
   s.decisionBackend === 'mock' || (s.decisionBackend === 'realtime' && s.realtimeProvider !== 'openai') || (s.decisionBackend === 'stt_judge' && s.sttProvider === 'mock' && s.judgeProvider === 'mock')

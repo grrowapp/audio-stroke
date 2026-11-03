@@ -15,5 +15,7 @@ export default defineNuxtConfig({
     experimental: { websocket: true },
   },
   devServer: { host: '127.0.0.1', port: 8000 },
+  // Dev only: Vite blocks unknown hostnames (403). Allow the same extra hosts the app allows (EXTRA_ALLOWED_HOSTS, port stripped).
+  vite: { server: { allowedHosts: (process.env.EXTRA_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().replace(/:\d+$/, '')).filter(Boolean) } },
   typescript: { strict: true },
 })

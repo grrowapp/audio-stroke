@@ -26,7 +26,12 @@ export interface RuntimeSettings {
   /** Assumption (verify against the live API): audio_start_ms is measured from the start of all audio
    * written during the session and does not reset on clear. */
   vad_timeline_resets_on_clear: boolean
+  /** Which backend listens and decides for this session ('' = server default, DECISION_BACKEND). */
+  decision_backend: DecisionBackendChoice
 }
+
+export type DecisionBackendChoice = '' | 'realtime' | 'stt_judge' | 'mock'
+export const DECISION_BACKEND_CHOICES: readonly DecisionBackendChoice[] = ['', 'realtime', 'stt_judge', 'mock']
 
 export const RUNTIME_BOUNDS: Record<string, [number, number]> = {
   silence_duration_ms: [200, 2000], prefix_padding_ms: [0, 1000], vad_threshold: [0.1, 0.95],
@@ -41,7 +46,7 @@ export const defaultRuntime = (o: Partial<RuntimeSettings> = {}): RuntimeSetting
   preview_interval_ms: 800, preview_max_per_utterance: 3, preview_timeout_ms: 5000, final_grace_ms: 200, final_timeout_ms: 8000,
   item_wait_timeout_ms: 4000, playback_start_timeout_ms: 6000, playback_end_slack_ms: 8000, session_ready_timeout_ms: 10000,
   max_utterance_ms: 20000, max_classification_requests: 150, ring_seconds: 40, session_max_ms: 600000, barge_in_enabled: false, barge_in_confirm_ms: 250,
-  vad_timeline_resets_on_clear: false, ...o,
+  vad_timeline_resets_on_clear: false, decision_backend: '', ...o,
 })
 
 export function runtimeFromUser(data: Record<string, unknown> | null | undefined): RuntimeSettings {
@@ -55,6 +60,11 @@ export function runtimeFromUser(data: Record<string, unknown> | null | undefined
     ;(rs as any)[k] = Number.isInteger(rs[k as keyof RuntimeSettings]) ? Math.round(v) : v
   }
   for (const k of RUNTIME_BOOLS) if (k in data) rs[k] = !!data[k]
+  if ('decision_backend' in data) {
+    const v = String(data.decision_backend ?? '')
+    if (!DECISION_BACKEND_CHOICES.includes(v as DecisionBackendChoice)) throw new Error(`decision_backend は ${DECISION_BACKEND_CHOICES.filter(Boolean).join(' / ')} のいずれかで指定してください`)
+    rs.decision_backend = v as DecisionBackendChoice
+  }
   return rs
 }
 

@@ -9,7 +9,13 @@ const st = conv.st
 const rt = reactive({
   silence_duration_ms: 600, final_grace_ms: 200, preview_enabled: true, preview_min_audio_ms: 800, preview_interval_ms: 800, preview_max_per_utterance: 3,
   barge_in_enabled: false, barge_in_confirm_ms: 250,
+  decision_backend: (props.config?.decision_backends?.default ?? '') as string,
 })
+const backendOptions = computed(() => (props.config?.decision_backends?.options ?? []) as { id: string; name: string; mock: boolean; detail: string; missing: string[] }[])
+const backendLabel = (o: { id: string; name: string; mock: boolean; detail: string; missing: string[] }) => {
+  const base = o.id === 'mock' ? 'MOCK（音声を理解しない）' : o.name === 'stt_judge' ? `STT+判定 ${o.detail}` : o.mock ? 'Realtime（MOCK）' : `Realtime ${o.detail}`
+  return o.missing.length ? `${base} — 未設定: ${o.missing.join(', ')}` : base
+}
 const consent = ref(false)
 const mockPreview = ref('ctrl_unclear')
 const mockFinal = ref('ctrl_unclear')
@@ -44,6 +50,13 @@ function exportLog() {
     <details id="runtimeDetails">
       <summary>実行時設定</summary>
       <div class="row">
+        <label>判定バックエンド
+          <select id="rsBackend" v-model="rt.decision_backend">
+            <option v-for="o in backendOptions" :key="o.id" :value="o.id" :disabled="o.missing.length > 0">{{ backendLabel(o) }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
         <label>silence_duration_ms <input id="rsSilence" v-model.number="rt.silence_duration_ms" type="number"></label>
         <label>再発話確認猶予 ms <input v-model.number="rt.final_grace_ms" type="number"></label>
         <label>暫定分類 <input id="rsPreview" v-model="rt.preview_enabled" type="checkbox"></label>
@@ -76,6 +89,7 @@ function exportLog() {
     <div class="grid">
       <div><span class="k">状態</span><span id="cPhase" class="v big">{{ st.phase }}</span></div>
       <div><span class="k">マイク</span><span id="cMic" class="v">{{ micLabel }}</span></div>
+      <div><span class="k">判定</span><span id="cBackend" class="v">{{ st.backend || '-' }}</span></div>
       <div><span class="k">モード</span><span class="v mode" :class="{ duplex: st.bargeInEnabled }">{{ st.bargeInEnabled ? '割り込み可（全二重）' : '半二重' }}</span></div>
       <div><span class="k">現在ノード</span><span id="cNode" class="v">{{ st.nodeLabel }} ({{ st.nodeId }})  turn {{ st.turnId }} / gen {{ st.generation }}</span></div>
       <div><span class="k">今の発話文</span><span id="cText" class="v">{{ st.text }}</span></div>

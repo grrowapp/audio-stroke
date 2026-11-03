@@ -94,7 +94,7 @@ class WsClient {
 beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbmvp-app-'))
   proc = spawn('node', [path.join(ROOT, '.output/server/index.mjs')], {
-    env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: dataDir, SCENARIO_PROVIDER: 'mock', TTS_PROVIDER: 'mock', REALTIME_PROVIDER: 'mock', NITRO_PORT: String(PORT), NITRO_HOST: '127.0.0.1' },
+    env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: dataDir, SCENARIO_PROVIDER: 'mock', TTS_PROVIDER: 'mock', REALTIME_PROVIDER: 'mock', DECISION_BACKEND: 'mock', STT_PROVIDER: 'mock', JUDGE_PROVIDER: 'mock', NITRO_PORT: String(PORT), NITRO_HOST: '127.0.0.1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let out = ''
@@ -178,6 +178,14 @@ describe('HTTP API', () => {
     const s2 = (await req('POST', '/api/sessions', { scenario_id: sid, version: 1, request_id: 'abc123' })).json
     expect(s1.session_id).toBe(s2.session_id); expect(s2.created).toBe(false)
     expect((await req('POST', '/api/sessions', { scenario_id: sid, version: 1, runtime: { silence_duration_ms: 5 } })).status).toBe(400)
+    // per-session backend choice (runtime.decision_backend); '' = server default
+    const cfg = (await req('GET', '/api/config')).json
+    expect(cfg.decision_backends.default).toBe('mock')
+    expect(cfg.decision_backends.options.map((o: any) => o.id)).toEqual(['realtime', 'stt_judge', 'mock'])
+    expect(s1.backend).toBe('mock')
+    const s3 = (await req('POST', '/api/sessions', { scenario_id: sid, version: 1, runtime: { decision_backend: 'stt_judge' } })).json
+    expect(s3.backend).toBe('stt_judge'); expect(s3.mock_realtime).toBe(true)
+    expect((await req('POST', '/api/sessions', { scenario_id: sid, version: 1, runtime: { decision_backend: 'gpt' } })).status).toBe(400)
   })
 
   it('session blocked when audio is missing', async () => {

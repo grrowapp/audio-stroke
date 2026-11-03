@@ -67,8 +67,10 @@ preview の音声渡し（inline / item）と temp item の削除はバックエ
 | `STT_VAD_RMS` / `STT_FINAL_WAIT_MS` | 内蔵 VAD の RMS しきい値 / final 待ち | `500` / `1200` |
 | 各社キー | `REVAI_ACCESS_TOKEN`, `DEEPGRAM_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`+`GOOGLE_PROJECT_ID`, `CF_ACCOUNT_ID`+`CF_API_TOKEN`, `TYPESAFE_API_KEY` | |
 
-バックエンドは起動時に固定（通話途中の切替はしない）。`/api/config` の `providers.decision` と
-セッションの `state.backend` に名前が出る。
+`DECISION_BACKEND` は既定値。セッション作成時の `runtime.decision_backend`（`realtime` / `stt_judge` / `mock`、
+空は既定）でセッションごとに上書きできる（UI の「実行時設定 → 判定バックエンド」）。選んだバックエンドに必要なキーが
+無ければ `POST /api/sessions` が 400 で未設定の変数名を返す。`/api/config` の `decision_backends` に各候補の説明と
+不足キー、`providers.decision` に既定、セッションの `state.backend` に実際の名前が出る。通話途中の切替はしない。
 
 ## 評価との関係
 

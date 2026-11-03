@@ -2,7 +2,7 @@ import { defineEventHandler } from 'h3'
 import { FIXED_RULES, SAMPLE_INSTRUCTION, STYLE_PRESETS, effectiveTtsFormat, effectiveTtsModels, effectiveTtsVoices } from '../lib/config'
 import { lexiconSummary } from '../lib/lexicon'
 import { METRIC_DEFINITIONS } from '../lib/metrics'
-import { describeBackend } from '../core/backendFactory'
+import { describeBackend, describeBackendOptions } from '../core/backendFactory'
 import { RUNTIME_BOUNDS, defaultRuntime } from '../lib/realtimeSession'
 import { CALL_DIRECTION_LABELS, DEFAULT_CALL_DIRECTION, IMPLEMENTED_CALL_DIRECTIONS, PLANNED_CALL_DIRECTIONS } from '../lib/scenarioSchema'
 import { services } from '../lib/services'
@@ -17,6 +17,7 @@ export default defineEventHandler(() => {
       realtime: { name: s.realtimeProvider, mock: s.realtimeProvider !== 'openai', model: s.realtimeModel || null, preview_mode: s.previewAudioMode },
       decision: describeBackend(s),
     },
+    decision_backends: describeBackendOptions(s),
     voice_options: {
       providers: [s.ttsProvider], models: effectiveTtsModels(s), voices: effectiveTtsVoices(s), format: effectiveTtsFormat(s),
       speed: { min: s.speedMin, max: s.speedMax, default: 1.0 },

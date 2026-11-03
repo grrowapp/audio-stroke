@@ -22,6 +22,7 @@ export interface ConvState {
   interruptible: boolean
   bargeInEnabled: boolean
   mock: boolean
+  backend: string
   nodeLabel: string
   nodeId: string
   turnId: number
@@ -47,7 +48,7 @@ export interface ConvState {
 
 export function useConversation() {
   const st = reactive<ConvState>({
-    phase: '', micEnabled: false, playing: false, interruptible: false, bargeInEnabled: false, mock: false, nodeLabel: '', nodeId: '',
+    phase: '', micEnabled: false, playing: false, interruptible: false, bargeInEnabled: false, mock: false, backend: '', nodeLabel: '', nodeId: '',
     turnId: 0, generation: 0, text: '', preview: '', final: '', nextText: '', cache: '', error: '', interruptedInfo: '', counters: {}, usage: null,
     metrics: {}, events: [], sessionId: null, versionLabel: '', branches: {}, mockNode: '', connected: false, finished: false,
   })
@@ -103,6 +104,7 @@ export function useConversation() {
         st.micEnabled = m.mic_enabled; st.interruptible = m.interruptible; st.bargeInEnabled = m.barge_in_enabled
         st.counters = m.counters
         st.mockNode = m.node_id
+        if (m.backend) st.backend = m.backend
         applyMicGate()
         break
       case 'prefetch': {

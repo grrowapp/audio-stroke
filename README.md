@@ -72,6 +72,19 @@ npm run dev               # http://127.0.0.1:8000（開発）
 5. 全音声 ready かつ検証合格（`READY`）の版だけ **会話開始** が有効になり、サーバー側でも再確認します（音声ファイルの sha256 まで照合）。
 6. **会話**: 状態、マイク送信可否、モード（半二重／割り込み可）、現在ノード、発話文、暫定分岐、確定分岐、次の発話文、音声キャッシュ、中断された発話、遅延指標、エラーを表示。停止はどの状態でも有効。
 
+### ターミナル電話クライアント（`cli/phone.ts`）
+
+ブラウザの代わりにマイクとスピーカーを SoX（`brew install sox`）から取り、同じ WebSocket 契約（`docs/API_EVENTS.md`）で会話する。
+http でも動くので（ブラウザの secure context 制約がない）、別ホストで動くサーバーに対して実機マイク比較ができる。
+
+```
+npm run phone -- --server http://192.168.1.206:8000 --list
+npm run phone -- --server http://192.168.1.206:8000 --scenario <id> --backend stt_judge --log out.jsonl
+```
+
+`--backend` は `runtime.decision_backend`（realtime / stt_judge / mock）。接続中のキー: `s` = 再生を飛ばして回答へ、`q` = 停止。
+エコーキャンセルは無いので既定の半二重で使う（`--barge-in` はヘッドセット前提）。サーバー側は `EXTRA_ALLOWED_HOSTS=<host>:<port>` でこのクライアントの Host/Origin を許可する。
+
 ## 設計の要点
 
 ### 応対パターンの 2 段構成（Step1 / Step2）
@@ -126,6 +139,7 @@ npm run dev               # http://127.0.0.1:8000（開発）
 ### 判定バックエンドの差し替え（`docs/DECISION_BACKEND.md`）
 会話中に「聞く・判定する」部分は `DecisionBackend` 境界で差し替え可能。`DECISION_BACKEND=realtime`（OpenAI Realtime）か
 `stt_judge`（`STT_PROVIDER`: revai / deepgram / google、`JUDGE_PROVIDER`: clef / jev / openai_compat（ローカル LLM））。
+これは既定で、UI の「実行時設定 → 判定バックエンド」（`runtime.decision_backend`）で会話開始ごとに切り替えられる（再起動不要）。
 状態遷移・再生・上限・stale 判定はエンジン側に残り、バックエンドは「発話の合図」と「許可された分岐から 1 つ選ぶ」だけを担う。
 合成音声 18 件の比較（`npm run eval:stt`）では Rev.ai ＋ Clef が Realtime と同等の正解率で約 0.2 秒速く、判定部分の原価は約 1/7。
 

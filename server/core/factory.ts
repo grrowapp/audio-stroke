@@ -21,7 +21,7 @@ export interface EngineFactoryArgs {
   sendBrowser: BrowserSend
   metrics: MetricsSink
   audio: AudioStore
-  backendFactory: () => DecisionBackend
+  backendFactory: (choice?: string) => DecisionBackend
   app: Settings
 }
 
@@ -43,7 +43,7 @@ export function createEngine(a: EngineFactoryArgs): Engine {
     })
   }
   return new ConversationEngine({
-    sessionId: a.sessionId, scenario: a.scenario, manifest: a.manifest, audio: a.audio, backend: a.backendFactory(),
+    sessionId: a.sessionId, scenario: a.scenario, manifest: a.manifest, audio: a.audio, backend: a.backendFactory(a.settings.decision_backend),
     sendBrowser: a.sendBrowser, settings: a.settings, metrics: a.metrics,
     maxFrameBytes: a.app.maxWsAudioFrameBytes, maxSendBuffer: a.app.maxOpenaiSendBufferBytes,
   })

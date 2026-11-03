@@ -6,6 +6,8 @@ import { SttJudgeBackend } from '../server/core/sttJudgeBackend'
 import { MockJudge } from '../server/core/judge/mock'
 import { MockStt } from '../server/core/stt/mock'
 import { EnergyVad } from '../server/core/vad'
+import { backendMissing, describeBackendOptions } from '../server/core/backendFactory'
+import { loadSettings } from '../server/lib/config'
 import { ConversationEngine, defaultRuntime, type RuntimeSettings } from '../server/lib/realtimeSession'
 import { SessionMetrics } from '../server/lib/metrics'
 import { CTRL_UNCLEAR } from '../server/lib/scenarioSchema'
@@ -145,6 +147,19 @@ describe('STT + judge backend', () => {
     expect(h.msgs('final').at(-1)!.branch_id).toBe(CTRL_UNCLEAR)
     h.engine.pushBrowserJson({ type: 'stop' })
     await h.run
+  })
+})
+
+describe('backend choice availability', () => {
+  it('lists the env vars each backend lacks; the session choice overrides DECISION_BACKEND', () => {
+    const s = loadSettings({ dataDir: '/tmp/x', decisionBackend: 'mock', realtimeProvider: 'openai', realtimeModel: '', openaiApiKey: '', sttProvider: 'revai', judgeProvider: 'clef', revaiAccessToken: '', cfAccountId: 'acc', cfApiToken: '' })
+    expect(backendMissing(s)).toEqual([])
+    expect(backendMissing({ ...s, decisionBackend: 'realtime' })).toEqual(['REALTIME_MODEL', 'OPENAI_API_KEY'])
+    expect(backendMissing({ ...s, decisionBackend: 'stt_judge' })).toEqual(['REVAI_ACCESS_TOKEN', 'CF_API_TOKEN'])
+    expect(backendMissing({ ...s, decisionBackend: 'stt_judge', revaiAccessToken: 't', cfApiToken: 'k' })).toEqual([])
+    const opts = describeBackendOptions(s)
+    expect(opts.default).toBe('mock')
+    expect(opts.options.find((o) => o.id === 'stt_judge')!.detail).toContain('revai + clef')
   })
 })
 

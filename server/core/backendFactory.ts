@@ -49,6 +49,31 @@ export function makeBackend(s: Settings, transportFactory: () => RealtimeTranspo
   return new RealtimeBackend(t, nodeHost(), s.previewAudioMode)
 }
 
+/** Environment variables a backend needs and lacks (empty = usable). */
+export function backendMissing(s: Settings): string[] {
+  const m: string[] = []
+  if (s.decisionBackend === 'realtime') {
+    if (s.realtimeProvider === 'openai') { if (!s.realtimeModel) m.push('REALTIME_MODEL'); if (!s.openaiApiKey) m.push('OPENAI_API_KEY') }
+  } else if (s.decisionBackend === 'stt_judge') {
+    if (s.sttProvider === 'revai' && !s.revaiAccessToken) m.push('REVAI_ACCESS_TOKEN')
+    if (s.sttProvider === 'deepgram' && !s.deepgramApiKey) m.push('DEEPGRAM_API_KEY')
+    if (s.sttProvider === 'google' && !s.googleProjectId) m.push('GOOGLE_PROJECT_ID')
+    if (s.judgeProvider === 'clef') { if (!s.cfAccountId) m.push('CF_ACCOUNT_ID'); if (!s.cfApiToken) m.push('CF_API_TOKEN') }
+    if (s.judgeProvider === 'jev' && !s.typesafeApiKey) m.push('TYPESAFE_API_KEY')
+    if (s.judgeProvider === 'openai_compat' && !s.judgeUrl) m.push('JUDGE_URL')
+  }
+  return m
+}
+
+/** Per-session choices for the UI: each backend as it would run with the current environment. */
+export function describeBackendOptions(s: Settings): { default: Settings['decisionBackend']; options: { id: Settings['decisionBackend']; name: string; mock: boolean; detail: string; missing: string[] }[] } {
+  const options = (['realtime', 'stt_judge', 'mock'] as const).map((id) => {
+    const eff = { ...s, decisionBackend: id }
+    return { id, ...describeBackend(eff), missing: backendMissing(eff) }
+  })
+  return { default: s.decisionBackend, options }
+}
+
 /** Human-readable description for /api/config and badges. */
 export function describeBackend(s: Settings): { name: string; mock: boolean; detail: string } {
   if (s.decisionBackend === 'stt_judge') {

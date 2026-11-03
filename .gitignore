@@ -6,3 +6,4 @@ node_modules/
 .nitro/
 .cache/
 fixtures/human/*.wav
+dist/

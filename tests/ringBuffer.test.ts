@@ -37,5 +37,8 @@ describe('PcmRing + runtime settings', () => {
     expect(() => runtimeFromUser({ silence_duration_ms: 50 })).toThrow()
     expect(() => runtimeFromUser({ final_grace_ms: 'abc' })).toThrow()
     expect(() => runtimeFromUser({ barge_in_confirm_ms: 5000 })).toThrow()
+    expect(runtimeFromUser({}).decision_backend).toBe('')
+    expect(runtimeFromUser({ decision_backend: 'stt_judge' }).decision_backend).toBe('stt_judge')
+    expect(() => runtimeFromUser({ decision_backend: 'gpt' })).toThrow()
   })
 })

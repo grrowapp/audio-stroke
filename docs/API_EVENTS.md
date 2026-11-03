@@ -26,7 +26,7 @@
 版の状態: `REVIEW`（draft）→ `AUDIO_PREPARING` → `READY` / `AUDIO_FAILED`。
 ジョブの状態: `queued` / `running` / `succeeded` / `failed` / `canceled` / `interrupted`（再起動で回収）。
 
-`runtime` の主なキー（範囲はサーバーで強制）: `silence_duration_ms`, `final_grace_ms`, `preview_enabled`, `preview_min_audio_ms`, `preview_interval_ms`, `preview_max_per_utterance`, `barge_in_enabled`, `barge_in_confirm_ms`。
+`runtime` の主なキー（範囲はサーバーで強制）: `silence_duration_ms`, `final_grace_ms`, `preview_enabled`, `preview_min_audio_ms`, `preview_interval_ms`, `preview_max_per_utterance`, `barge_in_enabled`, `barge_in_confirm_ms`, `decision_backend`（`realtime` / `stt_judge` / `mock`、空＝サーバー既定）。
 
 ## WebSocket（ブラウザ ⇄ サーバー）
 

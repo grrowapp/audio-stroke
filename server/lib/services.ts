@@ -4,7 +4,7 @@
  */
 import path from 'node:path'
 import { AudioStore } from './audioStore'
-import { ensureDirs, dbPath, loadDotenv, loadSettings, type Settings } from './config'
+import { ensureDirs, dbPath, loadDotenv, loadSettings, withDecisionBackend, type Settings } from './config'
 import { JobManager } from './jobs'
 import { configureLexicon, type Lexicon } from './lexicon'
 import { makeBackend } from '../core/backendFactory'
@@ -24,8 +24,8 @@ export interface Services {
   generator: BaseGenerator
   synthesizer: SpeechSynthesizer
   transportFactory: () => RealtimeTransport
-  /** Builds the per-session "listen and decide" backend (docs/DECISION_BACKEND.md). */
-  backendFactory: () => DecisionBackend
+  /** Builds the per-session "listen and decide" backend (docs/DECISION_BACKEND.md); `choice` = runtime.decision_backend ('' = DECISION_BACKEND). */
+  backendFactory: (choice?: string) => DecisionBackend
   engines: Map<string, Engine>
   recovered: { jobs: number; versions: number; sessions: number }
   allowedHosts: Set<string>
@@ -38,7 +38,7 @@ export interface ServiceOverrides {
   generator?: BaseGenerator
   synthesizer?: SpeechSynthesizer
   transportFactory?: () => RealtimeTransport
-  backendFactory?: () => DecisionBackend
+  backendFactory?: (choice?: string) => DecisionBackend
   extraAllowedHosts?: string[]
 }
 
@@ -57,7 +57,7 @@ export function createServices(o: ServiceOverrides = {}): Services {
     settings.realtimeProvider === 'openai'
       ? new OpenAIRealtimeTransport(settings.realtimeUrl, settings.realtimeModel, settings.openaiApiKey)
       : new MockRealtimeTransport())
-  const backendFactory = o.backendFactory ?? (() => makeBackend(settings, transportFactory))
+  const backendFactory = o.backendFactory ?? ((choice = '') => makeBackend(withDecisionBackend(settings, choice), transportFactory))
   const hosts = new Set([`127.0.0.1:${settings.port}`, `localhost:${settings.port}`, ...(o.extraAllowedHosts ?? [])])
   // Behind a TLS-terminating platform proxy the browser origin is https://<public host>.
   const origins = new Set([...hosts].flatMap((h) => [`http://${h}`, `https://${h}`]))
