@@ -12,7 +12,8 @@
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
     "test:realapi": "RUN_REAL_API=1 vitest run tests/realapi",
-    "eval:realtime": "node --import tsx server/scripts/evalRealtime.ts"
+    "eval:realtime": "node --import tsx server/scripts/evalRealtime.ts",
+    "eval:stt": "node --import tsx server/scripts/evalStt.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.3.0",
@@ -22,10 +23,11 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@google-cloud/speech": "^8.2.1",
     "@types/ws": "8.18.1",
     "tsx": "4.21.0",
+    "typescript": "5.9.3",
     "vitest": "5.0.5",
-    "vue-tsc": "3.2.5",
-    "typescript": "5.9.3"
+    "vue-tsc": "3.2.5"
   }
 }
