@@ -138,6 +138,20 @@ describe('HTTP API', () => {
     expect((await req('POST', '/api/scenarios/generate', { instruction: 'x', evil: 1 })).status).toBe(422)
   })
 
+  it('scenario summaries: read-only list for the sidebar; old list shape unchanged', async () => {
+    const before = (await req('GET', '/api/scenarios/summaries')).json.scenarios as any[]
+    const sid = await prepareReady()
+    const r = await req('GET', '/api/scenarios/summaries')
+    expect(r.status).toBe(200)
+    const row = r.json.scenarios.find((x: any) => x.scenario_id === sid)
+    expect(r.json.scenarios.length).toBe(before.length + 1)
+    expect(row).toMatchObject({ latest: 1, status: 'READY', approved_versions: 1 })
+    expect(row.title).toBeTruthy()
+    expect(row.audio.total).toBeGreaterThan(0)
+    expect(row.audio.ready).toBe(row.audio.total)
+    expect(Object.keys((await req('GET', '/api/scenarios')).json.scenarios[0]).sort()).toEqual(['latest', 'scenario_id', 'updated'])
+  })
+
   it('audio path traversal rejected', async () => {
     for (const p of ['/api/audio/..%2F..%2Fetc%2Fpasswd', '/api/audio/' + 'a'.repeat(63), '/api/audio/' + 'g'.repeat(64), '/api/audio/' + '0'.repeat(64)]) {
       expect((await req('GET', p)).status).toBe(404)

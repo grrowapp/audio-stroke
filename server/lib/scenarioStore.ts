@@ -144,6 +144,36 @@ export class Store {
     return this.db.prepare('SELECT scenario_id, MAX(version) AS latest, MAX(created_at) AS updated FROM scenario_versions GROUP BY scenario_id ORDER BY updated DESC').all() as any[]
   }
 
+  /**
+   * Read-only overview for the sidebar: one row per scenario, describing its newest version.
+   * `approved_versions` counts versions that were ever approved (approved_at set).
+   */
+  listScenarioSummaries() {
+    const rows = this.db.prepare(`
+      SELECT v.scenario_id, v.version, v.status, v.data_json, v.manifest_json, v.created_at,
+             a.first_created, a.approved_versions
+      FROM scenario_versions v
+      JOIN (SELECT scenario_id, MAX(version) AS latest, MIN(created_at) AS first_created,
+                   SUM(CASE WHEN approved_at IS NOT NULL THEN 1 ELSE 0 END) AS approved_versions
+            FROM scenario_versions GROUP BY scenario_id) a
+        ON a.scenario_id = v.scenario_id AND a.latest = v.version
+      ORDER BY v.created_at DESC`).all() as any[]
+    return rows.map((r) => {
+      let title = ''
+      try { title = String(JSON.parse(r.data_json)?.title ?? '') } catch { /* corrupt row: fall back to id in UI */ }
+      let audio = { total: 0, ready: 0 }
+      try {
+        const es = r.manifest_json ? Object.values(JSON.parse(r.manifest_json)?.entries ?? {}) as any[] : []
+        audio = { total: es.length, ready: es.filter((e) => e.status === 'ready').length }
+      } catch { /* ignore */ }
+      return {
+        scenario_id: r.scenario_id as string, title, latest: Number(r.version), status: r.status as string,
+        created_at: Number(r.first_created), updated_at: Number(r.created_at),
+        approved_versions: Number(r.approved_versions), audio,
+      }
+    })
+  }
+
   setVersionStatus(scenarioId: string, version: number, status: string) {
     this.db.prepare('UPDATE scenario_versions SET status=? WHERE scenario_id=? AND version=?').run(status, scenarioId, version)
   }
