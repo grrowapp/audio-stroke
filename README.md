@@ -83,6 +83,16 @@ npm run phone -- --server http://192.168.1.206:8000 --scenario <id> --backend st
 ```
 
 `--backend` は `runtime.decision_backend`（realtime / stt_judge / mock）。接続中のキー: `s` = 再生を飛ばして回答へ、`q` = 停止。
+
+macOS アプリ版（`apps/mac-phone/`、Homebrew cask `Casks/audio-stroke-phone.rb`）: 「開始」ボタンで同じクライアントを動かす。
+マイク権限はアプリに付く。サーバー・判定バックエンド・シナリオは起動時のダイアログで選び、`~/.config/audio-stroke/phone.env` に接続先が残る。
+
+```
+brew tap grrowapp/audio-stroke https://github.com/grrowapp/audio-stroke
+brew install --cask audio-stroke-phone      # node と sox も入る
+```
+
+リリース手順: `apps/mac-phone/build.sh <version>` → `gh release create phone-v<version> dist/AudioStrokePhone-<version>.zip --target mvp` → cask の version / sha256 を更新。
 エコーキャンセルは無いので既定の半二重で使う（`--barge-in` はヘッドセット前提）。サーバー側は `EXTRA_ALLOWED_HOSTS=<host>:<port>` でこのクライアントの Host/Origin を許可する。
 
 ## 設計の要点
