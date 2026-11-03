@@ -66,7 +66,7 @@ export default defineWebSocketHandler({
     try {
       engine = createEngine({
         sessionId: sid, scenario: sc, manifest: row.manifest as Manifest, settings: runtimeFromUser(s.runtime), metrics,
-        sendBrowser: (msg) => sendJson(peer, msg), audio: svc.audio, transportFactory: svc.transportFactory, app: svc.settings,
+        sendBrowser: (msg) => sendJson(peer, msg), audio: svc.audio, backendFactory: svc.backendFactory, app: svc.settings,
       })
     } catch (e: any) {
       sendJson(peer, { type: 'finished', phase: 'ERROR', reason: 'config', message: String(e.message) })

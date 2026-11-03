@@ -5,6 +5,7 @@ import { manifestMissing, type Manifest } from '../../lib/audioStore'
 import { runtimeFromUser } from '../../lib/realtimeSession'
 import { READY } from '../../lib/scenarioStore'
 import { validateScenario } from '../../lib/scenarioValidator'
+import { decisionIsMock } from '../../lib/config'
 import { services } from '../../lib/services'
 
 const Body = z.object({
@@ -32,7 +33,7 @@ export default defineEventHandler(async (event) => {
   } catch (e: any) {
     throw httpError(400, e.message)
   }
-  if (svc.settings.realtimeProvider === 'openai' && (!svc.settings.realtimeModel || !svc.settings.openaiApiKey)) throw httpError(400, 'REALTIME_MODEL / OPENAI_API_KEY が未設定です')
+  if (svc.settings.decisionBackend === 'realtime' && svc.settings.realtimeProvider === 'openai' && (!svc.settings.realtimeModel || !svc.settings.openaiApiKey)) throw httpError(400, 'REALTIME_MODEL / OPENAI_API_KEY が未設定です')
   const [sessionId, created] = svc.store.createSession(body.scenario_id, body.version, rs as any, body.request_id ?? null)
   const s = svc.store.getSession(sessionId)!
   if (!created && (s.scenario_id !== body.scenario_id || s.version !== body.version)) throw httpError(409, 'request_id が別の版で使用済みです')
@@ -41,7 +42,8 @@ export default defineEventHandler(async (event) => {
     entry_audio_id: manifest.entries[`node:${sc.entry_node_id}`]!.audio_id,
     manifest: Object.fromEntries(Object.entries(manifest.entries).map(([k, e]) => [k, { audio_id: e.audio_id, text: e.text }])),
     branches: Object.fromEntries(sc.nodes.map((n) => [n.id, n.edges.map((e) => e.id)])),
-    mock_realtime: svc.settings.realtimeProvider !== 'openai',
+    mock_realtime: decisionIsMock(svc.settings),
+    backend: svc.settings.decisionBackend,
     barge_in_enabled: rs.barge_in_enabled,
   }
 })

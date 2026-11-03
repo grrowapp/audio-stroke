@@ -7,6 +7,8 @@ import { AudioStore } from './audioStore'
 import { ensureDirs, dbPath, loadDotenv, loadSettings, type Settings } from './config'
 import { JobManager } from './jobs'
 import { configureLexicon, type Lexicon } from './lexicon'
+import { makeBackend } from '../core/backendFactory'
+import type { DecisionBackend } from '../core/decision'
 import type { Engine } from '../core/types'
 import type { RealtimeTransport } from './realtimeSession'
 import { MockRealtimeTransport, OpenAIRealtimeTransport } from './realtimeSession'
@@ -22,6 +24,8 @@ export interface Services {
   generator: BaseGenerator
   synthesizer: SpeechSynthesizer
   transportFactory: () => RealtimeTransport
+  /** Builds the per-session "listen and decide" backend (docs/DECISION_BACKEND.md). */
+  backendFactory: () => DecisionBackend
   engines: Map<string, Engine>
   recovered: { jobs: number; versions: number; sessions: number }
   allowedHosts: Set<string>
@@ -34,6 +38,7 @@ export interface ServiceOverrides {
   generator?: BaseGenerator
   synthesizer?: SpeechSynthesizer
   transportFactory?: () => RealtimeTransport
+  backendFactory?: () => DecisionBackend
   extraAllowedHosts?: string[]
 }
 
@@ -52,10 +57,11 @@ export function createServices(o: ServiceOverrides = {}): Services {
     settings.realtimeProvider === 'openai'
       ? new OpenAIRealtimeTransport(settings.realtimeUrl, settings.realtimeModel, settings.openaiApiKey)
       : new MockRealtimeTransport())
+  const backendFactory = o.backendFactory ?? (() => makeBackend(settings, transportFactory))
   const hosts = new Set([`127.0.0.1:${settings.port}`, `localhost:${settings.port}`, ...(o.extraAllowedHosts ?? [])])
   // Behind a TLS-terminating platform proxy the browser origin is https://<public host>.
   const origins = new Set([...hosts].flatMap((h) => [`http://${h}`, `https://${h}`]))
-  return { settings, store, audio, jobs, generator, synthesizer, transportFactory, engines: new Map(), recovered, allowedHosts: hosts, allowedOrigins: origins, lexicon }
+  return { settings, store, audio, jobs, generator, synthesizer, transportFactory, backendFactory, engines: new Map(), recovered, allowedHosts: hosts, allowedOrigins: origins, lexicon }
 }
 
 let instance: Services | null = null

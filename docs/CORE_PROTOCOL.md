@@ -1,6 +1,7 @@
 # Core プロトコル（応答速度に関わる部分をネイティブ実装へ差し替えるための境界）
 
 応答速度に直接関わる処理は `server/core/` に隔離し、ホスト（Nitro の HTTP/WS、SQLite、Vue UI）からは `Engine` インターフェース（`server/core/types.ts`）だけを見ます。
+エンジンの内側では「聞く・判定する」部分がさらに `DecisionBackend`（`server/core/decision.ts`、`docs/DECISION_BACKEND.md`）で切り離されており、OpenAI Realtime と「ストリーミング STT ＋ 判定モデル」を設定で差し替えられます。
 
 ```
 ブラウザ ──WS(JSON / 0x01+PCM16)──▶ Nitro ws route ──Engine I/F──▶ core ──WS──▶ OpenAI Realtime
@@ -12,7 +13,9 @@
 | 層 | 責務 | 差し替え |
 |---|---|---|
 | `core/pcmRing.ts` | 送信済み PCM の保持と prefix 切り出し | ネイティブで再実装対象 |
-| `core/transports.ts` | Realtime WebSocket（イベント in/out） | ネイティブで再実装対象 |
+| `core/decision.ts` | 判定バックエンドの契約（VAD の合図・判定要求/結果） | 契約 |
+| `core/realtimeBackend.ts` / `core/transports.ts` | OpenAI Realtime 実装（イベント翻訳 / WebSocket） | ネイティブで再実装対象 |
+| `core/sttJudgeBackend.ts` / `core/stt/*` / `core/judge/*` / `core/vad.ts` | STT ＋ 判定モデル実装（Rev.ai / Deepgram / Google、Clef / Jev / ローカル LLM、内蔵 VAD） | ネイティブで再実装対象 |
 | `core/engine.ts` | VAD イベント処理、preview/final、barge-in、再生指示、stale 判定、タイマー | ネイティブで再実装対象 |
 | `core/runtime.ts` | 実行時設定と範囲 | 共有（JSON） |
 | `core/types.ts` | `Engine` / `EngineHost` / `MetricsSink` / `AudioReadiness` | 契約 |

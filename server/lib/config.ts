@@ -82,6 +82,24 @@ export interface Settings {
   realtimeModel: string
   realtimeUrl: string
   previewAudioMode: 'inline' | 'item'
+  // Decision backend (docs/DECISION_BACKEND.md): what listens and decides during the conversation
+  decisionBackend: 'realtime' | 'stt_judge' | 'mock'
+  sttProvider: 'revai' | 'deepgram' | 'google' | 'mock'
+  judgeProvider: 'clef' | 'jev' | 'openai_compat' | 'mock'
+  judgeModel: string
+  judgeUnclearThreshold: number
+  judgeUrl: string
+  judgeApiKey: string
+  sttVadRms: number
+  sttFinalWaitMs: number
+  revaiAccessToken: string
+  deepgramApiKey: string
+  googleProjectId: string
+  googleSttLocation: string
+  googleSttModel: string
+  cfAccountId: string
+  cfApiToken: string
+  typesafeApiKey: string
   // generation limits
   maxInstructionChars: number
   maxFactsChars: number
@@ -140,6 +158,23 @@ export function loadSettings(overrides: Partial<Settings> = {}): Settings {
     realtimeModel: env('REALTIME_MODEL'),
     realtimeUrl: env('REALTIME_URL', 'wss://api.openai.com/v1/realtime'),
     previewAudioMode: env('PREVIEW_AUDIO_MODE', 'inline') === 'item' ? 'item' : 'inline',
+    decisionBackend: pick(env('DECISION_BACKEND', env('REALTIME_PROVIDER', 'mock') === 'openai' ? 'realtime' : 'mock'), ['realtime', 'stt_judge', 'mock'] as const, 'mock'),
+    sttProvider: pick(env('STT_PROVIDER', 'mock'), ['revai', 'deepgram', 'google', 'mock'] as const, 'mock'),
+    judgeProvider: pick(env('JUDGE_PROVIDER', 'mock'), ['clef', 'jev', 'openai_compat', 'mock'] as const, 'mock'),
+    judgeModel: env('JUDGE_MODEL', 'clef-flash'),
+    judgeUnclearThreshold: envFloat('JUDGE_UNCLEAR_THRESHOLD', 0.5),
+    judgeUrl: env('JUDGE_URL'),
+    judgeApiKey: env('JUDGE_API_KEY'),
+    sttVadRms: envFloat('STT_VAD_RMS', 500),
+    sttFinalWaitMs: envInt('STT_FINAL_WAIT_MS', 1200),
+    revaiAccessToken: env('REVAI_ACCESS_TOKEN'),
+    deepgramApiKey: env('DEEPGRAM_API_KEY'),
+    googleProjectId: env('GOOGLE_PROJECT_ID'),
+    googleSttLocation: env('GOOGLE_STT_LOCATION', 'us'),
+    googleSttModel: env('GOOGLE_STT_MODEL', 'chirp_3'),
+    cfAccountId: env('CF_ACCOUNT_ID'),
+    cfApiToken: env('CF_API_TOKEN'),
+    typesafeApiKey: env('TYPESAFE_API_KEY'),
     maxInstructionChars: 4000,
     maxFactsChars: 8000,
     maxProhibitionsChars: 2000,
@@ -159,6 +194,14 @@ export function loadSettings(overrides: Partial<Settings> = {}): Settings {
   }
   return s
 }
+
+function pick<T extends string>(v: string, allowed: readonly T[], def: T): T {
+  return (allowed as readonly string[]).includes(v) ? (v as T) : def
+}
+
+/** True when the configured decision backend understands no audio (mock Realtime, or mock STT + mock judge). */
+export const decisionIsMock = (s: Settings): boolean =>
+  s.decisionBackend === 'mock' || (s.decisionBackend === 'realtime' && s.realtimeProvider !== 'openai') || (s.decisionBackend === 'stt_judge' && s.sttProvider === 'mock' && s.judgeProvider === 'mock')
 
 export function ensureDirs(s: Settings): void {
   fs.mkdirSync(path.join(s.dataDir, 'audio'), { recursive: true })

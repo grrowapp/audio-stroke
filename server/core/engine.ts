@@ -1,12 +1,14 @@
 /**
- * Realtime conversation engine: VAD, streaming preview / final classification,
+ * Conversation engine: VAD events, streaming preview / final classification,
  * cancellation, stale-result rejection, playback with acks, optional barge-in.
+ * Listening and deciding are delegated to a DecisionBackend (./decision.ts):
+ * OpenAI Realtime, or streaming STT + a decision model; the engine owns every state change.
  *
  * The engine never calls Claude or TTS. Every spoken utterance comes from the
  * pre-generated manifest; a cache miss stops the session safely.
  *
  * All state changes are serialized through one queue (browser messages,
- * browser audio, Realtime server events, timers), so ordering is deterministic.
+ * browser audio, backend events, timers), so ordering is deterministic.
  * It depends only on the interfaces in ./types.ts (no Node APIs directly), so
  * the same contract can be served by a native core (see docs/CORE_PROTOCOL.md).
  */
@@ -15,7 +17,7 @@ import * as router from '../lib/router'
 import { CTRL_END_REQUEST, CTRL_UNCLEAR, findControl, findNode, type Node, type Scenario } from '../lib/scenarioSchema'
 import { BYTES_PER_SAMPLE, PcmRing, SAMPLE_RATE, SAMPLES_PER_MS } from './pcmRing'
 import type { RuntimeSettings } from './runtime'
-import { TransportClosed, type RealtimeTransport, type RtEvent } from './transports'
+import { BackendClosed, type ClassifyRequest, type DecisionBackend, type DecisionEvent } from './decision'
 import { nodeHost, type AudioReadiness, type BrowserSend, type CoreToBrowser, type Engine, type EngineHost, type MetricsSink, type Phase } from './types'
 
 interface Utterance {
@@ -39,10 +41,8 @@ interface Pending {
   nodeId: string
   sentAt: number
   allowed: string[]
+  /** utterance ids this request references (released only once no live request needs them) */
   references: string[]
-  tempItemId: string | null
-  responseId: string | null
-  awaitingItem: boolean
   stale: boolean
   done: boolean
 }
@@ -76,7 +76,7 @@ export class EngineFatal extends Error {
   }
 }
 
-type QueueItem = ['browser', Record<string, any>] | ['audio', Uint8Array] | ['rt', RtEvent] | ['rt_closed', string] | ['timer', [string, number]]
+type QueueItem = ['browser', Record<string, any>] | ['audio', Uint8Array] | ['be', DecisionEvent] | ['be_closed', string] | ['timer', [string, number]]
 
 class AsyncQueue<T> {
   private items: T[] = []
@@ -97,11 +97,10 @@ export interface EngineOptions {
   scenario: Scenario
   manifest: Manifest
   audio: AudioReadiness
-  transport: RealtimeTransport
+  backend: DecisionBackend
   sendBrowser: BrowserSend
   settings: RuntimeSettings
   metrics: MetricsSink
-  previewAudioMode?: 'inline' | 'item'
   maxFrameBytes?: number
   maxSendBuffer?: number
   host?: EngineHost
@@ -112,12 +111,11 @@ export class ConversationEngine implements Engine {
   scenario: Scenario // frozen for the session
   manifest: Manifest // private immutable copy
   audio: AudioReadiness
-  transport: RealtimeTransport
+  backend: DecisionBackend
   sendBrowserFn: BrowserSend
   rs: RuntimeSettings
   metrics: MetricsSink
   host: EngineHost
-  previewMode: 'inline' | 'item'
   maxFrameBytes: number
   maxSendBuffer: number
   clock: () => number
@@ -138,11 +136,11 @@ export class ConversationEngine implements Engine {
   utterances: Utterance[] = []
   active: Utterance | null = null
   pending = new Map<string, Pending>()
-  respToKey = new Map<string, string>()
   decision: Decision | null = null
   finalIssuedGeneration: number | null = null
   lastPreviewBranch: string | null = null
   firstPreviewLogged = false
+  /** utterance ids to release once no live request references them */
   itemsToDelete: string[] = []
   requestsSent = 0
   playback: Playback | null = null
@@ -166,11 +164,10 @@ export class ConversationEngine implements Engine {
     this.scenario = o.scenario
     this.manifest = JSON.parse(JSON.stringify(o.manifest))
     this.audio = o.audio
-    this.transport = o.transport
+    this.backend = o.backend
     this.sendBrowserFn = o.sendBrowser
     this.rs = o.settings
     this.metrics = o.metrics
-    this.previewMode = o.previewAudioMode ?? 'inline'
     this.maxFrameBytes = o.maxFrameBytes ?? 24000
     this.maxSendBuffer = o.maxSendBuffer ?? 4_000_000
     this.host = o.host ?? nodeHost()
@@ -184,15 +181,14 @@ export class ConversationEngine implements Engine {
   pushBrowserAudio(data: Uint8Array) { this.queue.push(['audio', data]) }
 
   async run(): Promise<string> {
-    this.metrics.event('session_start', { scenario_id: this.scenario.scenario_id, version: this.scenario.version, runtime: this.rs, mock_realtime: this.transport.isMock, preview_mode: this.previewMode })
+    this.metrics.event('session_start', { scenario_id: this.scenario.scenario_id, version: this.scenario.version, runtime: this.rs, backend: this.backend.name, mock_realtime: this.backend.isMock })
     try {
       try {
-        await this.transport.connect()
+        await this.backend.start({ sessionId: this.sessionId, runtime: this.rs })
       } catch (e: any) {
-        throw new EngineFatal('realtime_connect_failed', `Realtime API に接続できません: ${e?.constructor?.name ?? e}`)
+        throw new EngineFatal('realtime_connect_failed', String(e?.message ?? e))
       }
-      this.reader = this.readTransport()
-      await this.sendRt(this.sessionUpdate())
+      this.reader = this.readBackend()
       this.setTimer('session_ready', this.rs.session_ready_timeout_ms)
       this.setTimer('session_max', this.rs.session_max_ms)
       await this.emitState()
@@ -202,7 +198,7 @@ export class ConversationEngine implements Engine {
           await this.dispatch(kind, payload)
         } catch (e) {
           if (e instanceof EngineFatal) throw e
-          if (e instanceof TransportClosed) throw new EngineFatal('realtime_disconnected', this.disconnectMessage())
+          if (e instanceof BackendClosed) throw new EngineFatal('realtime_disconnected', this.disconnectMessage())
           throw e
         }
       }
@@ -214,7 +210,7 @@ export class ConversationEngine implements Engine {
       }
     } finally {
       for (const h of this.timerHandles.values()) this.host.clearTimer(h)
-      try { await this.transport.close() } catch { /* ignore */ }
+      try { await this.backend.close() } catch { /* ignore */ }
       this.ring.dropAll()
       this.metrics.close({ end_reason: this.endReason, final_phase: this.phase, node_id: this.nodeId, interrupted: this.interrupted })
       this.finished()
@@ -223,14 +219,14 @@ export class ConversationEngine implements Engine {
   }
 
   // ------------------------------------------------------------------ plumbing
-  private async readTransport() {
+  private async readBackend() {
     try {
       for (;;) {
-        const ev = await this.transport.recv()
-        this.queue.push(['rt', ev])
+        const ev = await this.backend.recv()
+        this.queue.push(['be', ev])
       }
     } catch (e: any) {
-      this.queue.push(['rt_closed', String(e?.message ?? e)])
+      this.queue.push(['be_closed', String(e?.message ?? e)])
     }
   }
 
@@ -248,9 +244,9 @@ export class ConversationEngine implements Engine {
     this.timers.set(name, (this.timers.get(name) ?? 0) + 1) // invalidates any queued fire
   }
 
-  private async sendRt(ev: RtEvent) {
-    if (this.transport.bufferedBytes() > this.maxSendBuffer) throw new EngineFatal('send_buffer_overflow', 'Realtime への送信が詰まっています（過負荷）。安全のため停止しました。')
-    await this.transport.send(ev)
+  private async sendAudio(pcm: Uint8Array) {
+    if (this.backend.bufferedBytes() > this.maxSendBuffer) throw new EngineFatal('send_buffer_overflow', '判定バックエンドへの送信が詰まっています（過負荷）。安全のため停止しました。')
+    await this.backend.pushAudio(pcm)
   }
 
   private async latency(name: string, valueMs: number, extra: Record<string, unknown> = {}) {
@@ -265,33 +261,11 @@ export class ConversationEngine implements Engine {
     } catch { /* browser gone; the app pushes a disconnect message */ }
   }
 
-  private sessionUpdate(): RtEvent {
-    return {
-      type: 'session.update',
-      session: {
-        type: 'realtime',
-        output_modalities: ['text'],
-        instructions: router.SESSION_INSTRUCTIONS,
-        audio: {
-          input: {
-            format: { type: 'audio/pcm', rate: SAMPLE_RATE },
-            turn_detection: {
-              type: 'server_vad', threshold: this.rs.vad_threshold, prefix_padding_ms: this.rs.prefix_padding_ms,
-              silence_duration_ms: this.rs.silence_duration_ms, create_response: false, interrupt_response: false,
-            },
-          },
-        },
-        tools: [],
-        tool_choice: 'none',
-      },
-    }
-  }
-
   private disconnectMessage(): string {
     if (this.phase === 'PLAYING' && this.playback) {
-      return `音声再生中（${this.playback.utteranceKey}）に Realtime 接続が切断されました。次のノードへは自動で進みません。新しいセッションで再開始してください。`
+      return `音声再生中（${this.playback.utteranceKey}）に判定バックエンド（${this.backend.name}）の接続が切断されました。次のノードへは自動で進みません。新しいセッションで再開始してください。`
     }
-    return 'Realtime 接続が切断されました。新しいセッションで再開始してください。'
+    return `判定バックエンド（${this.backend.name}）の接続が切断されました。新しいセッションで再開始してください。`
   }
 
   // ------------------------------------------------------------------ dispatch
@@ -299,8 +273,8 @@ export class ConversationEngine implements Engine {
     if (this.done) return
     if (kind === 'audio') await this.onAudio(payload)
     else if (kind === 'browser') await this.onBrowser(payload)
-    else if (kind === 'rt') await this.onRt(payload)
-    else if (kind === 'rt_closed') throw new EngineFatal('realtime_disconnected', this.disconnectMessage())
+    else if (kind === 'be') await this.onBackend(payload)
+    else if (kind === 'be_closed') throw new EngineFatal('realtime_disconnected', this.disconnectMessage())
     else if (kind === 'timer') {
       const [name, token] = payload as [string, number]
       if (this.timers.get(name) === token) {
@@ -319,7 +293,7 @@ export class ConversationEngine implements Engine {
     }
     if (data.length > this.maxFrameBytes || data.length % BYTES_PER_SAMPLE) throw new EngineFatal('bad_audio_frame', '不正な音声フレームを受信しました。')
     this.ring.append(data)
-    await this.sendRt({ type: 'input_audio_buffer.append', audio: this.host.base64(data) })
+    await this.sendAudio(data)
     const u = this.active
     if (u && !u.stopped) {
       if (this.ring.total - u.startSample > this.rs.max_utterance_ms * SAMPLES_PER_MS) throw new EngineFatal('utterance_too_long', `1回の発話が上限 ${this.rs.max_utterance_ms}ms を超えました。安全のため停止しました。`)
@@ -345,7 +319,7 @@ export class ConversationEngine implements Engine {
       const val = msg.value_ms
       if (typeof val === 'number') this.metrics.event('client_metric', { clock: 'browser', name, value_ms: Math.round(val * 10) / 10, playback_id: String(msg.playback_id ?? '').slice(0, 40), turn_id: msg.turn_id })
     } else if (t === 'mock_vad') {
-      if (this.transport.isMock && this.transport.control) await this.transport.control(msg)
+      if (this.backend.isMock && this.backend.control) await this.backend.control(msg)
     } else this.metrics.event('unknown_browser_message', { type: String(t).slice(0, 40) })
   }
 
@@ -369,7 +343,7 @@ export class ConversationEngine implements Engine {
     if (interruptible) {
       // Full-duplex: the mic stays open during playback. Nothing is referenced any more (previous
       // turn's items were released at commit), so the buffer can be cleared before the prompt starts.
-      await this.sendRt({ type: 'input_audio_buffer.clear' })
+      await this.backend.clearInput()
       this.ring.dropAll()
       this.listenStartSample = this.ring.total
       if (this.rs.vad_timeline_resets_on_clear) this.vadBaseSample = this.ring.total
@@ -479,7 +453,7 @@ export class ConversationEngine implements Engine {
     this.firstPreviewLogged = false
     if (clearBuffer) {
       // Mic was off during playback, nothing is being spoken or referenced → safe to clear.
-      await this.sendRt({ type: 'input_audio_buffer.clear' })
+      await this.backend.clearInput()
       this.ring.dropAll()
       this.listenStartSample = this.ring.total
       if (this.rs.vad_timeline_resets_on_clear) this.vadBaseSample = this.ring.total
@@ -507,55 +481,37 @@ export class ConversationEngine implements Engine {
     return out
   }
 
-  // ------------------------------------------------------------------ realtime events
-  private async onRt(ev: RtEvent) {
-    const t = ev.type ?? ''
-    if (t === 'session.updated') {
+  // ------------------------------------------------------------------ backend events
+  private async onBackend(ev: DecisionEvent) {
+    if (ev.type === 'ready') {
       if (this.phase === 'CONNECTING') {
         this.cancelTimer('session_ready')
         const step = router.entryStep(this.scenario)
         await this.play(step.playKey, step.playText, step.after, step.nextNodeId, 'entry')
       }
-    } else if (t === 'input_audio_buffer.speech_started') await this.onSpeechStarted(ev)
-    else if (t === 'input_audio_buffer.speech_stopped') await this.onSpeechStopped(ev)
-    else if (t === 'input_audio_buffer.committed') {
-      const u = this.utt(ev.item_id)
+    } else if (ev.type === 'speech_started') await this.onSpeechStarted(ev.utterance_id, ev.audio_start_ms)
+    else if (ev.type === 'speech_stopped') await this.onSpeechStopped(ev.utterance_id, ev.audio_end_ms)
+    else if (ev.type === 'utterance_ready') {
+      const u = this.utt(ev.utterance_id)
       if (u) {
         u.committed = true
-        await this.maybeFinal()
-      }
-    } else if (t === 'conversation.item.done' || t === 'conversation.item.added') {
-      const iid = ev.item?.id
-      const u = this.utt(iid)
-      if (u && t === 'conversation.item.done') {
         u.itemDone = true
         await this.maybeFinal()
-      } else await this.onTempItemReady(iid, t)
-    } else if (t === 'response.created') {
-      const resp = ev.response ?? {}
-      const key = resp.metadata?.request_key
-      const p = key ? this.pending.get(key) : undefined
-      if (p && resp.id) {
-        p.responseId = resp.id
-        this.respToKey.set(resp.id, key)
-        if (p.stale) await this.cancelResponse(p)
       }
-    } else if (t === 'response.done') await this.onResponseDone(ev.response ?? {})
-    else if (t === 'error') await this.onRtError(ev.error ?? {})
+    } else if (ev.type === 'decision') await this.onDecision(ev)
+    else if (ev.type === 'error') await this.onBackendError(ev)
   }
 
   private utt(itemId: string | undefined): Utterance | undefined {
     return this.utterances.find((u) => u.itemId === itemId)
   }
 
-  private async onSpeechStarted(ev: RtEvent) {
+  private async onSpeechStarted(itemId: string, startMs: number) {
     if (!this.micEnabled) {
       this.metrics.event('speech_started_ignored', { phase: this.phase })
       return
     }
-    const startMs = Number(ev.audio_start_ms ?? 0)
     const now = this.clock()
-    const itemId: string = ev.item_id ?? `unknown_${this.utterances.length}`
     if (this.phase === 'PLAYING') {
       const pb = this.playback
       if (!pb || !pb.interruptible || this.bargeCandidate) {
@@ -624,18 +580,18 @@ export class ConversationEngine implements Engine {
     await this.emitState()
   }
 
-  private async onSpeechStopped(ev: RtEvent) {
-    if (this.bargeCandidate && ev.item_id === this.bargeCandidate.itemId) {
-      await this.rejectBargeIn(ev.item_id)
+  private async onSpeechStopped(itemId: string, audioEndMs: number | null) {
+    if (this.bargeCandidate && itemId === this.bargeCandidate.itemId) {
+      await this.rejectBargeIn(itemId)
       return
     }
-    const u = this.utt(ev.item_id) ?? this.active
+    const u = this.utt(itemId) ?? this.active
     if (!u || u.stopped) return
     u.stopped = true
     u.tStopped = this.clock()
     if (this.active === u) this.active = null
     this.phase = 'DECIDING'
-    this.metrics.event('speech_stopped', { turn_id: this.turnId, item_id: u.itemId, audio_end_ms: ev.audio_end_ms })
+    this.metrics.event('speech_stopped', { turn_id: this.turnId, item_id: u.itemId, audio_end_ms: audioEndMs })
     await this.sendBrowser({ type: 'speech_stopped', turn_id: this.turnId })
     this.setTimer('item_wait', this.rs.item_wait_timeout_ms)
     await this.emitState()
@@ -665,48 +621,35 @@ export class ConversationEngine implements Engine {
     u.lastPreviewT = now
     const refs = this.utterances.filter((x) => x !== u && utteranceReady(x)).map((x) => x.itemId)
     const node = findNode(this.scenario, this.nodeId)!
-    const audioMsg = { type: 'message', role: 'user', content: [{ type: 'input_audio', audio: this.host.base64(prefix) }] }
     const p = this.newPending('preview', node, refs)
-    if (this.previewMode === 'item') {
-      p.tempItemId = 'pv_' + this.host.newId(6)
-      p.awaitingItem = true
-      await this.sendRt({ type: 'conversation.item.create', event_id: 'evt_i_' + p.key, item: { id: p.tempItemId, ...audioMsg } })
-    } else {
-      await this.sendRequest(p, [...refsOf(refs), audioMsg])
-    }
+    await this.sendRequest(p, node, u.itemId, prefix)
     this.metrics.inc('preview_requests')
-    this.metrics.event('preview_request', { turn_id: this.turnId, generation: this.generation, prefix_ms: Math.floor(prefix.length / BYTES_PER_SAMPLE / SAMPLES_PER_MS), index: u.previewsSent, mode: this.previewMode })
+    this.metrics.event('preview_request', { turn_id: this.turnId, generation: this.generation, prefix_ms: Math.floor(prefix.length / BYTES_PER_SAMPLE / SAMPLES_PER_MS), index: u.previewsSent })
     this.setTimer('preview_timeout', rs.preview_timeout_ms)
   }
 
-  private async onTempItemReady(iid: string | undefined, t: string) {
-    if (t !== 'conversation.item.done' || !iid) return
-    const p = [...this.pending.values()].find((x) => x.tempItemId === iid && x.awaitingItem)
-    if (!p) return
-    p.awaitingItem = false
-    if (p.stale) {
-      p.done = true
-      this.itemsToDelete.push(iid)
-      await this.gcItems()
-      return
-    }
-    await this.sendRequest(p, [...refsOf(p.references), { type: 'item_reference', id: iid }])
-  }
-
   private newPending(phase: 'preview' | 'final', node: Node, refs: string[]): Pending {
-    const p: Pending = { key: this.host.newId(8), phase, turnId: this.turnId, generation: this.generation, nodeId: node.id, sentAt: this.clock(), allowed: router.allowedBranchIds(node), references: [...refs], tempItemId: null, responseId: null, awaitingItem: false, stale: false, done: false }
+    const p: Pending = { key: this.host.newId(8), phase, turnId: this.turnId, generation: this.generation, nodeId: node.id, sentAt: this.clock(), allowed: router.allowedBranchIds(node), references: [...refs], stale: false, done: false }
     this.pending.set(p.key, p)
     return p
   }
 
-  private async sendRequest(p: Pending, inputItems: Record<string, unknown>[]) {
-    const node = findNode(this.scenario, p.nodeId)!
+  private async sendRequest(p: Pending, node: Node, activeUtteranceId: string | null, prefixPcm: Uint8Array | null) {
     const metadata = { session_id: this.sessionId, scenario_version: String(this.scenario.version), node_id: p.nodeId, turn_id: String(p.turnId), decision_generation: String(p.generation), phase: p.phase, request_key: p.key }
-    const ev = router.responseEvent({ scenario: this.scenario, node, inputItems, metadata, lastPromptText: this.lastPromptText, history: this.history, phase: p.phase, eventId: 'evt_r_' + p.key })
+    const req: ClassifyRequest = {
+      key: p.key, phase: p.phase, scenario: this.scenario, node, allowed: p.allowed, lastPromptText: this.lastPromptText, history: [...this.history],
+      utteranceIds: [...p.references], activeUtteranceId, prefixPcm, metadata,
+    }
     p.sentAt = this.clock()
-    if (p.tempItemId) p.references = [...p.references, p.tempItemId]
     this.requestsSent++
-    await this.sendRt(ev)
+    try {
+      await this.backend.classify(req)
+    } catch (e) {
+      if (e instanceof BackendClosed) throw e
+      p.done = true
+      this.metrics.event('backend_error', { code: 'classify_failed', message: String((e as any)?.message ?? e).slice(0, 200), phase: p.phase })
+      if (p.phase === 'final') { this.cancelTimer('final_timeout'); await this.onFinal(p, CTRL_UNCLEAR, '', 'backend_error', 'error') }
+    }
   }
 
   // ------------------------------------------------------------------ final
@@ -727,7 +670,7 @@ export class ConversationEngine implements Engine {
     const node = findNode(this.scenario, this.nodeId)!
     const refs = this.utterances.map((u) => u.itemId)
     const p = this.newPending('final', node, refs)
-    await this.sendRequest(p, refsOf(refs))
+    await this.sendRequest(p, node, null, null)
     this.finalIssuedGeneration = this.generation
     this.metrics.inc('final_requests')
     this.metrics.event('final_request', { turn_id: this.turnId, generation: this.generation, items: refs.length })
@@ -751,27 +694,23 @@ export class ConversationEngine implements Engine {
   }
 
   private async cancelResponse(p: Pending) {
-    if (p.responseId && !p.done) {
-      try { await this.sendRt({ type: 'response.cancel', response_id: p.responseId }) } catch (e) { if (!(e instanceof TransportClosed)) throw e }
+    if (!p.done) {
+      try { await this.backend.cancel(p.key) } catch (e) { if (!(e instanceof BackendClosed)) throw e }
     }
   }
 
-  private async onResponseDone(resp: RtEvent) {
-    const md = resp.metadata ?? {}
-    const key = md.request_key ?? this.respToKey.get(resp.id ?? '')
-    const p = key ? this.pending.get(key) : undefined
+  private async onDecision(ev: Extract<DecisionEvent, { type: 'decision' }>) {
+    const p = this.pending.get(ev.key)
     if (!p || p.done) {
       this.metrics.inc('stale_ignored')
-      this.metrics.event('response_ignored', { reason: 'unknown_or_duplicate', response_id: String(resp.id ?? '').slice(0, 40) })
+      this.metrics.event('response_ignored', { reason: 'unknown_or_duplicate', key: String(ev.key ?? '').slice(0, 40) })
       return
     }
     p.done = true
-    this.metrics.addUsage(resp.usage)
-    if (p.tempItemId) this.itemsToDelete.push(p.tempItemId)
+    this.metrics.addUsage(ev.usage)
     await this.gcItems()
-    const expected: Record<string, string> = { session_id: this.sessionId, scenario_version: String(this.scenario.version), node_id: p.nodeId, turn_id: String(p.turnId), decision_generation: String(p.generation), phase: p.phase }
     const current = p.turnId === this.turnId && p.nodeId === this.nodeId && p.generation === this.generation && (this.phase === 'LISTENING' || this.phase === 'DECIDING')
-    if (Object.keys(md).length && Object.entries(expected).some(([k, v]) => md[k] !== v)) {
+    if (!ev.metadata_ok) {
       this.metrics.inc('stale_ignored')
       this.metrics.event('response_ignored', { reason: 'metadata_mismatch', phase: p.phase })
       if (p.phase === 'final' && !p.stale && current) {
@@ -786,40 +725,42 @@ export class ConversationEngine implements Engine {
       this.metrics.event('response_ignored', { reason: 'stale', phase: p.phase, turn_id: p.turnId, generation: p.generation, current_generation: this.generation })
       return
     }
-    const parsed = router.parseResponse(resp, p.allowed)
+    // the backend validated against the allowed enum; re-check here so no backend can widen the set
+    const ok = ev.ok && typeof ev.branch_id === 'string' && p.allowed.includes(ev.branch_id)
+    const error = ok ? '' : (ev.error ?? (ev.ok ? 'branch_not_allowed' : 'invalid_output'))
     if (p.phase === 'preview') {
       this.cancelTimer('preview_timeout')
       if (this.decision !== null || this.finalIssuedGeneration !== null) {
         this.metrics.inc('preview_invalidated')
         return
       }
-      if (!parsed.ok) {
-        this.metrics.event('preview_invalid', { error: parsed.error })
+      if (!ok) {
+        this.metrics.event('preview_invalid', { error })
         return
       }
-      await this.onPreview(parsed)
+      await this.onPreview(ev.branch_id!, ev.reason)
     } else {
       this.cancelTimer('final_timeout')
-      this.lastUsage = (resp.usage as Record<string, unknown> | undefined) ?? null
-      if (parsed.ok) await this.onFinal(p, parsed.branchId!, parsed.reason, null, 'realtime')
-      else await this.onFinal(p, CTRL_UNCLEAR, '', parsed.error, 'invalid_output')
+      this.lastUsage = ev.usage ?? null
+      if (ok) await this.onFinal(p, ev.branch_id!, ev.reason, null, this.backend.name)
+      else await this.onFinal(p, CTRL_UNCLEAR, '', error, 'invalid_output')
     }
   }
 
-  private async onPreview(parsed: router.ParsedBranch) {
+  private async onPreview(branchId: string, reason: string) {
     this.metrics.inc('preview_results')
-    if (this.lastPreviewBranch && this.lastPreviewBranch !== parsed.branchId) this.metrics.inc('preview_changes')
-    this.lastPreviewBranch = parsed.branchId!
+    if (this.lastPreviewBranch && this.lastPreviewBranch !== branchId) this.metrics.inc('preview_changes')
+    this.lastPreviewBranch = branchId
     const first = this.utterances[0]
     if (!this.firstPreviewLogged && first) {
       this.firstPreviewLogged = true
       await this.latency('speech_start_event_to_first_preview_ms', this.clock() - first.tStarted, { turn_id: this.turnId })
     }
     const node = findNode(this.scenario, this.nodeId)!
-    const info = this.branchInfo(node, parsed.branchId!)
-    this.metrics.event('preview', { turn_id: this.turnId, branch_id: parsed.branchId })
-    await this.sendBrowser({ type: 'preview', turn_id: this.turnId, branch_id: parsed.branchId, label: info.label, next_text: info.nextText, reason: parsed.reason, provisional: true })
-    await this.sendBrowser({ type: 'prefetch', audio_ids: this.candidateAudioIds(node, parsed.branchId!) })
+    const info = this.branchInfo(node, branchId)
+    this.metrics.event('preview', { turn_id: this.turnId, branch_id: branchId })
+    await this.sendBrowser({ type: 'preview', turn_id: this.turnId, branch_id: branchId, label: info.label, next_text: info.nextText, reason, provisional: true })
+    await this.sendBrowser({ type: 'prefetch', audio_ids: this.candidateAudioIds(node, branchId) })
   }
 
   private branchInfo(node: Node, branchId: string): { label: string; nextText: string } {
@@ -839,12 +780,13 @@ export class ConversationEngine implements Engine {
   private async onFinal(p: Pending | null, branchId: string, reason: string, fallbackReason: string | null, source: string) {
     const now = this.clock()
     const lastStop = Math.max(-Infinity, ...this.utterances.filter((u) => u.tStopped !== null).map((u) => u.tStopped!))
-    if (p && source === 'realtime') await this.latency('request_to_branch_ms', now - p.sentAt, { turn_id: this.turnId })
-    if (Number.isFinite(lastStop) && source === 'realtime') await this.latency('vad_event_to_branch_ms', now - lastStop, { turn_id: this.turnId })
+    const fromBackend = source === this.backend.name
+    if (p && fromBackend) await this.latency('request_to_branch_ms', now - p.sentAt, { turn_id: this.turnId })
+    if (Number.isFinite(lastStop) && fromBackend) await this.latency('vad_event_to_branch_ms', now - lastStop, { turn_id: this.turnId })
     this.decision = { branchId, generation: this.generation, reason, fallbackReason, source }
     const node = findNode(this.scenario, this.nodeId)!
     const info = this.branchInfo(node, branchId)
-    await this.sendBrowser({ type: 'final', turn_id: this.turnId, branch_id: branchId, label: info.label, next_text: info.nextText, reason, fallback_reason: fallbackReason, grace_ms: this.rs.final_grace_ms, usage: source === 'realtime' ? this.lastUsage : null })
+    await this.sendBrowser({ type: 'final', turn_id: this.turnId, branch_id: branchId, label: info.label, next_text: info.nextText, reason, fallback_reason: fallbackReason, grace_ms: this.rs.final_grace_ms, usage: fromBackend ? this.lastUsage : null })
     // short re-utterance grace before committing (counted in latency, not hidden)
     this.setTimer('grace', this.rs.final_grace_ms)
   }
@@ -859,47 +801,31 @@ export class ConversationEngine implements Engine {
     if (d.branchId === CTRL_UNCLEAR) this.metrics.inc('fallbacks')
     const label = this.branchInfo(node, d.branchId).label
     this.history.push([node.label, label])
-    this.metrics.event('turn', { turn_id: this.turnId, node_id: node.id, branch_id: d.branchId, source: d.source, fallback_reason: d.fallbackReason, step_reason: step.reason, next_key: step.playKey, preview_last: this.lastPreviewBranch, preview_matched: this.lastPreviewBranch === d.branchId, utterances: this.utterances.length, generation: d.generation, usage: d.source === 'realtime' ? this.lastUsage : null })
+    this.metrics.event('turn', { turn_id: this.turnId, node_id: node.id, branch_id: d.branchId, source: d.source, fallback_reason: d.fallbackReason, step_reason: step.reason, next_key: step.playKey, preview_last: this.lastPreviewBranch, preview_matched: this.lastPreviewBranch === d.branchId, utterances: this.utterances.length, generation: d.generation, usage: d.source === this.backend.name ? this.lastUsage : null })
     this.itemsToDelete.push(...this.utterances.map((u) => u.itemId))
     this.utterances = []
     await this.gcItems()
     await this.play(step.playKey, step.playText, step.after, step.nextNodeId, step.reason)
   }
 
-  /** Delete input items only once no live request references them. */
+  /** Release utterances only once no live request references them. */
   private async gcItems() {
+    for (const [k, p] of [...this.pending]) if (p.done) this.pending.delete(k)
     if (!this.itemsToDelete.length) return
     const liveRefs = new Set<string>()
-    for (const p of this.pending.values()) {
-      if (!p.done) {
-        p.references.forEach((r) => liveRefs.add(r))
-        if (p.tempItemId) liveRefs.add(p.tempItemId)
-      }
-    }
+    for (const p of this.pending.values()) if (!p.done) p.references.forEach((r) => liveRefs.add(r))
     const current = new Set(this.utterances.map((u) => u.itemId))
     if (this.bargeCandidate) current.add(this.bargeCandidate.itemId)
     const keep: string[] = []
-    for (const iid of this.itemsToDelete) {
-      if (liveRefs.has(iid) || current.has(iid)) {
-        keep.push(iid)
-        continue
-      }
-      try { await this.sendRt({ type: 'conversation.item.delete', item_id: iid }) } catch (e) { if (!(e instanceof TransportClosed)) throw e }
-    }
+    const free: string[] = []
+    for (const iid of this.itemsToDelete) (liveRefs.has(iid) || current.has(iid) ? keep : free).push(iid)
     this.itemsToDelete = keep
-    for (const [k, p] of [...this.pending]) {
-      if (p.done) {
-        this.pending.delete(k)
-        if (p.responseId) this.respToKey.delete(p.responseId)
-      }
-    }
+    if (free.length) { try { await this.backend.release(free) } catch (e) { if (!(e instanceof BackendClosed)) throw e } }
   }
 
-  private async onRtError(err: RtEvent) {
-    const eid: string = err.event_id ?? ''
-    this.metrics.event('realtime_error', { code: String(err.code ?? '').slice(0, 80), err_type: String(err.type ?? '').slice(0, 80), event_id: eid.slice(0, 60), message: String(err.message ?? '').slice(0, 200) })
-    const key = eid.startsWith('evt_r_') || eid.startsWith('evt_i_') ? eid.slice(6) : null
-    const p = key ? this.pending.get(key) : undefined
+  private async onBackendError(err: Extract<DecisionEvent, { type: 'error' }>) {
+    this.metrics.event('realtime_error', { backend: this.backend.name, code: err.code, key: (err.key ?? '').slice(0, 40), message: err.message })
+    const p = err.key ? this.pending.get(err.key) : undefined
     if (p && !p.done) {
       p.done = true
       await this.gcItems()
@@ -909,14 +835,14 @@ export class ConversationEngine implements Engine {
       }
       return
     }
-    if (this.phase === 'CONNECTING') throw new EngineFatal('realtime_session_error', 'Realtime セッション設定でエラーが発生しました（モデル名・設定を確認してください）。')
-    // an API error not tied to a request: surface it, never confuse it with an unclear utterance
-    await this.sendBrowser({ type: 'realtime_error', code: String(err.code ?? '').slice(0, 80), message: String(err.message ?? '').slice(0, 200) })
+    if (this.phase === 'CONNECTING') throw new EngineFatal('realtime_session_error', `判定バックエンド（${this.backend.name}）の設定でエラーが発生しました（モデル名・設定を確認してください）。`)
+    // a backend error not tied to a request: surface it, never confuse it with an unclear utterance
+    await this.sendBrowser({ type: 'realtime_error', code: err.code, message: err.message })
   }
 
   // ------------------------------------------------------------------ timers
   private async onTimer(name: string) {
-    if (name === 'session_ready') throw new EngineFatal('realtime_timeout', 'Realtime セッションの準備がタイムアウトしました。')
+    if (name === 'session_ready') throw new EngineFatal('realtime_timeout', `判定バックエンド（${this.backend.name}）の準備がタイムアウトしました。`)
     if (name === 'session_max') {
       await this.finish('STOPPED', 'session_max', `会話の上限時間（${Math.round(this.rs.session_max_ms / 1000)} 秒）に達したため終了しました。再開は新しいセッションで行ってください。`)
       return
@@ -958,7 +884,7 @@ export class ConversationEngine implements Engine {
       node_label: node?.label ?? '', node_text: node?.assistant_text ?? '', turn_id: this.turnId, decision_generation: this.generation,
       scenario_id: this.scenario.scenario_id, scenario_version: this.scenario.version, playing_key: this.playback?.utteranceKey ?? null,
       interruptible: this.playback?.interruptible ?? false, barge_in_enabled: this.rs.barge_in_enabled,
-      counters: this.metrics.counters, mock_realtime: this.transport.isMock,
+      counters: this.metrics.counters, mock_realtime: this.backend.isMock, backend: this.backend.name,
     })
   }
 
@@ -985,4 +911,3 @@ export class ConversationEngine implements Engine {
   untilDone = () => this.finishedP
 }
 
-const refsOf = (ids: string[]) => ids.map((id) => ({ type: 'item_reference', id }))

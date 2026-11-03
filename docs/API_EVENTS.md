@@ -7,7 +7,7 @@
 | メソッド | パス | 内容 |
 |---|---|---|
 | GET | `/healthz` | 死活確認 `{ok:true}`（Basic 認証の対象外。Host 検証は適用） |
-| GET | `/api/config` | Provider（MOCK か実 API か）、許可された音声設定、上限値、通話方向（`call_directions.implemented` / `planned`）、指標の測定境界 |
+| GET | `/api/config` | Provider（MOCK か実 API か）、判定バックエンド `providers.decision {name, mock, detail}`、許可された音声設定、上限値、通話方向（`call_directions.implemented` / `planned`）、指標の測定境界 |
 | POST | `/api/scenarios/generate` | 応対方針 → 非同期生成ジョブ。`{job_id, mock}`。`call_direction`（Step1: `inbound` 既定。`outbound` は実装予定で 400） |
 | GET | `/api/jobs/{job_id}` | ジョブの状態・進捗・usage・失敗理由 |
 | POST | `/api/jobs/{job_id}/cancel` | ジョブ取消 |
@@ -19,7 +19,7 @@
 | POST | `/api/scenarios/{id}/versions/{v}/audio/retry` | 失敗した音声だけ再生成 |
 | GET | `/api/scenarios/{id}/versions/{v}/manifest` | 音声 manifest（hash・長さ・MIME・状態・キャッシュ再利用） |
 | GET | `/api/audio/{audio_id}` | 音声配信。`audio_id` は 64 桁 hex（アプリ生成のキャッシュキー）のみ |
-| POST | `/api/sessions` | READY 版を固定したセッション作成 `{scenario_id, version, request_id?, runtime?}` |
+| POST | `/api/sessions` | READY 版を固定したセッション作成 `{scenario_id, version, request_id?, runtime?}`。応答の `backend` は判定バックエンド名、`mock_realtime` は音声を理解しない構成か |
 | GET | `/api/sessions/{id}/log.jsonl` | 評価ログ（JSONL） |
 | WS | `/ws?session_id=…` | 会話。1 セッション 1 回だけ接続可能 |
 

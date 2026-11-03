@@ -123,6 +123,12 @@ npm run dev               # http://127.0.0.1:8000（開発）
 - 手動の「再生中断」ボタンも中断した発話を記録し、そのノードへの回答として受付へ移ります。
 - 再生中の切断は次ノードへ進めず、再開始を求めます。開始クリックで AudioContext を resume し、最初の音声を開始前に decode します。
 
+### 判定バックエンドの差し替え（`docs/DECISION_BACKEND.md`）
+会話中に「聞く・判定する」部分は `DecisionBackend` 境界で差し替え可能。`DECISION_BACKEND=realtime`（OpenAI Realtime）か
+`stt_judge`（`STT_PROVIDER`: revai / deepgram / google、`JUDGE_PROVIDER`: clef / jev / openai_compat（ローカル LLM））。
+状態遷移・再生・上限・stale 判定はエンジン側に残り、バックエンドは「発話の合図」と「許可された分岐から 1 つ選ぶ」だけを担う。
+合成音声 18 件の比較（`npm run eval:stt`）では Rev.ai ＋ Clef が Realtime と同等の正解率で約 0.2 秒速く、判定部分の原価は約 1/7。
+
 ### 疎結合な core（ネイティブ再実装の境界）
 応答速度に直接関わる部分（音声取り込み、PCM リングバッファ、Realtime 通信、preview/final/barge-in の判定、再生指示、タイマー）は `server/core/` に隔離し、ホストは `Engine` インターフェースだけに依存します。`ConversationEngine` は Node API を直接使わず `EngineHost`（時計・タイマー・乱数・base64・ログ）経由で動くため、同じ契約をネイティブ（Rust/C++ 等）で実装して差し替えられます。`ENGINE_IMPL=subprocess ENGINE_CMD=/path/to/core` で、stdio 上の長さ付きフレーム（JSON / PCM）で話す子プロセス実装に切り替えられます（`server/core/subprocessEngine.ts`、偽 core によるテスト `tests/subprocessEngine.test.ts`）。契約の詳細と守るべき不変条件は [`docs/CORE_PROTOCOL.md`](docs/CORE_PROTOCOL.md)。
 

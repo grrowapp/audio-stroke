@@ -7,9 +7,9 @@ import path from 'node:path'
 import type { AudioStore, Manifest } from '../lib/audioStore'
 import type { Settings } from '../lib/config'
 import type { Scenario } from '../lib/scenarioSchema'
+import type { DecisionBackend } from './decision'
 import { ConversationEngine } from './engine'
 import type { RuntimeSettings } from './runtime'
-import type { RealtimeTransport } from './transports'
 import { SubprocessEngine } from './subprocessEngine'
 import type { BrowserSend, Engine, MetricsSink } from './types'
 
@@ -21,7 +21,7 @@ export interface EngineFactoryArgs {
   sendBrowser: BrowserSend
   metrics: MetricsSink
   audio: AudioStore
-  transportFactory: () => RealtimeTransport
+  backendFactory: () => DecisionBackend
   app: Settings
 }
 
@@ -43,8 +43,8 @@ export function createEngine(a: EngineFactoryArgs): Engine {
     })
   }
   return new ConversationEngine({
-    sessionId: a.sessionId, scenario: a.scenario, manifest: a.manifest, audio: a.audio, transport: a.transportFactory(),
-    sendBrowser: a.sendBrowser, settings: a.settings, metrics: a.metrics, previewAudioMode: a.app.previewAudioMode,
+    sessionId: a.sessionId, scenario: a.scenario, manifest: a.manifest, audio: a.audio, backend: a.backendFactory(),
+    sendBrowser: a.sendBrowser, settings: a.settings, metrics: a.metrics,
     maxFrameBytes: a.app.maxWsAudioFrameBytes, maxSendBuffer: a.app.maxOpenaiSendBufferBytes,
   })
 }

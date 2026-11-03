@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { AudioStore, buildManifest, type Manifest } from '../server/lib/audioStore'
 import { ensureDirs, loadSettings, type Settings } from '../server/lib/config'
 import { SessionMetrics } from '../server/lib/metrics'
-import { ConversationEngine, defaultRuntime, type RealtimeTransport, type RtEvent, type RuntimeSettings, TransportClosed } from '../server/lib/realtimeSession'
+import { ConversationEngine, RealtimeBackend, defaultRuntime, nodeHost, type RealtimeTransport, type RtEvent, type RuntimeSettings, TransportClosed } from '../server/lib/realtimeSession'
 import { GeneratedScenarioSchema, makeScenario, type GeneratedScenario, type Scenario } from '../server/lib/scenarioSchema'
 import { Store } from '../server/lib/scenarioStore'
 import { voiceSettings, type VoiceSettings } from '../server/lib/tts'
@@ -118,6 +118,7 @@ export class Harness {
   scenario: Scenario
   manifest: Manifest
   transport = new ScriptedTransport()
+  backend: RealtimeBackend
   browser: Record<string, any>[] = []
   rs: RuntimeSettings
   metrics: SessionMetrics
@@ -134,9 +135,10 @@ export class Harness {
     this.playMs = o.playMs ?? 10
     this.rs = defaultRuntime({ final_grace_ms: 30, preview_min_audio_ms: 300, preview_interval_ms: 300, ...(o.rs ?? {}) })
     this.metrics = new SessionMetrics(logDir, 'sess_test' + Math.random().toString(16).slice(2, 8))
+    this.backend = new RealtimeBackend(this.transport, nodeHost(), o.mode ?? 'inline')
     this.engine = new ConversationEngine({
-      sessionId: 'sess_0123456789abcdef', scenario: this.scenario, manifest: this.manifest, audio, transport: this.transport,
-      sendBrowser: (m) => this.onBrowser(m), settings: this.rs, metrics: this.metrics, previewAudioMode: o.mode ?? 'inline',
+      sessionId: 'sess_0123456789abcdef', scenario: this.scenario, manifest: this.manifest, audio, backend: this.backend,
+      sendBrowser: (m) => this.onBrowser(m), settings: this.rs, metrics: this.metrics,
     })
   }
 
