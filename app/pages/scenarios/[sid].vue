@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { api } from '~/composables/useApi'
+import { ApiError, api } from '~/composables/useApi'
 import { fmtTime, statusLabel } from '~/composables/scenarioView'
 
 // 読み取り専用の確認画面。編集・承認・会話開始はトップ画面の既存フローで行う。
@@ -24,7 +24,7 @@ async function load() {
     row.value = await api('GET', `/api/scenarios/${sid.value}/versions/${ver.value}`)
     manifest.value = await api('GET', `/api/scenarios/${sid.value}/versions/${ver.value}/manifest`)
   } catch (e: any) {
-    error.value = e.message
+    error.value = e instanceof ApiError && e.status === 404 ? 'シナリオが見つかりません' : e.message
   }
 }
 watch(() => [route.params.sid, route.query.v], load, { immediate: true })
