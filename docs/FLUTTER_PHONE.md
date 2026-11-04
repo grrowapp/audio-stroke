@@ -99,7 +99,7 @@ source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke
 ### リリース手順
 
 1. `apps/flutter-phone/pubspec.yaml` の version を更新して commit（version は `+` より前が ipa 名・`CFBundleShortVersionString`、`+` 以降が `CFBundleVersion` と apps.json の `buildVersion`）。
-2. tag `phone-flutter-v<version>` を push すると、GitHub Actions（`flutter-phone-ipa`）が ipa をビルドして Release に添付する。**この workflow は現在 `.github/workflows-pending/flutter-phone-ipa.yml` にある**（push に使った gh token に `workflow` scope が無く、`.github/workflows/` には置けなかったため。Actions の実検証は未実施）。有効にするには、`gh auth refresh -s workflow` の後で `git mv .github/workflows-pending/flutter-phone-ipa.yml .github/workflows/` して push し、`gh workflow run flutter-phone-ipa.yml --ref <branch>`（workflow_dispatch）で一度動かして ipa の artifact を確認する。
+2. tag `phone-flutter-v<version>` を push すると、GitHub Actions（`.github/workflows/flutter-phone-ipa.yml`）が ipa をビルドして Release に添付する。tag と pubspec の version が不一致ならジョブは失敗する。tag を打たずに試すだけなら `gh workflow run flutter-phone-ipa.yml --ref <branch>`（workflow_dispatch）で ipa が artifact に出る。
 3. Mac で直接作る場合: `apps/flutter-phone/tool/build-ipa.sh` → `dist/AudioStrokePhone-<version>.ipa`。
 4. `apps/flutter-phone/tool/release-ipa.sh dist/AudioStrokePhone-<version>.ipa` が Release 作成（既にあれば上書きアップロード）と `altstore/apps.json` の versions 先頭への追記（同じ version は置換）を行う。Release を Actions で作った場合は `--no-release` を付けて apps.json だけ更新する。
 5. apps.json の変更を commit して mvp に merge する。
