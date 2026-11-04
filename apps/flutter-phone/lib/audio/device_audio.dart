@@ -36,15 +36,17 @@ class RecordAudioSource implements AudioSource {
   @override
   final int sampleRate;
 
-  final AudioRecorder _rec = AudioRecorder();
+  // Created on start(), so a source that is never started (MOCK sessions) allocates nothing.
+  AudioRecorder? _recorder;
 
   @override
   Future<Stream<Uint8List>> start() async {
-    if (!await _rec.hasPermission()) {
+    final rec = _recorder ??= AudioRecorder();
+    if (!await rec.hasPermission()) {
       throw StateError('マイク権限がありません（設定アプリで許可してください）');
     }
-    await _rec.ios?.manageAudioSession(false); // null on non-iOS
-    return _rec.startStream(RecordConfig(
+    await rec.ios?.manageAudioSession(false); // null on non-iOS
+    return rec.startStream(RecordConfig(
       encoder: AudioEncoder.pcm16bits,
       sampleRate: sampleRate,
       numChannels: 1,
@@ -56,8 +58,14 @@ class RecordAudioSource implements AudioSource {
 
   @override
   Future<void> stop() async {
-    await _rec.stop();
-    await _rec.dispose();
+    final rec = _recorder;
+    _recorder = null;
+    if (rec == null) return;
+    try {
+      await rec.stop();
+    } finally {
+      await rec.dispose();
+    }
   }
 }
 
@@ -149,7 +157,7 @@ class _JustHandle implements PlaybackHandle {
       final p = await pf;
       _player = p;
       if (_stopped) {
-        await p.dispose();
+        await _disposePlayer();
         return;
       }
       // play() completes when playback ends (or is stopped); "started" = playing and ready.
@@ -158,7 +166,7 @@ class _JustHandle implements PlaybackHandle {
       if (!_started.isCompleted) _started.complete();
       await ended;
       if (!_stopped && !_completed.isCompleted) _completed.complete();
-      await p.dispose();
+      await _disposePlayer();
     } catch (e) {
       if (_stopped) return;
       if (!_started.isCompleted) {
@@ -188,8 +196,20 @@ class _JustHandle implements PlaybackHandle {
     _lastPos = p.position.inMilliseconds;
     try {
       await p.stop();
+    } catch (_) {}
+    await _disposePlayer();
+    return _lastPos;
+  }
+
+  bool _disposed = false;
+
+  /// The player is disposed exactly once, whichever of end / stop / error gets here first.
+  Future<void> _disposePlayer() async {
+    final p = _player;
+    if (p == null || _disposed) return;
+    _disposed = true;
+    try {
       await p.dispose();
     } catch (_) {}
-    return _lastPos;
   }
 }

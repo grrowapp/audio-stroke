@@ -87,10 +87,16 @@ class FakeMic implements AudioSource {
   @override
   final int sampleRate;
   final c = StreamController<Uint8List>();
+  Object? startError;
+  int stopCalls = 0;
   @override
-  Future<Stream<Uint8List>> start() async => c.stream;
+  Future<Stream<Uint8List>> start() async {
+    if (startError != null) throw startError!;
+    return c.stream;
+  }
+
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async => stopCalls++;
 }
 
 Future<void> pump() => Future<void>.delayed(const Duration(milliseconds: 5));
@@ -348,6 +354,24 @@ void main() {
       await ws.close();
       await running;
     });
+  });
+
+  test('microphone start() failure after connect: error is rethrown and the WS is closed', () async {
+    ws = FakeWs();
+    mic = FakeMic()..startError = StateError('マイク権限がありません');
+    final c = PhoneClient(
+      api: FakeApi(),
+      micSource: mic,
+      sink: FakeSink(),
+      log: (_) {},
+      connector: (url, headers) async => ws,
+    );
+    await expectLater(
+      c.run(SessionInfo({'session_id': 's', 'version': 1, 'backend': 'mock', 'entry_audio_id': 'a' * 64})),
+      throwsA(isA<StateError>()),
+    );
+    expect(ws.open, isFalse, reason: 'server session must not stay connected');
+    expect(mic.stopCalls, 1);
   });
 
   test('prefetch hint fetches audio and hands it to the sink', () async {

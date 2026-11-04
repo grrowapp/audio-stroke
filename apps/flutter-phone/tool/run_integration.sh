@@ -10,10 +10,11 @@ PORT="$(node -e 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>
 [ "$PORT" != "8000" ] || { echo "got port 8000, retry"; exit 1; }
 DATA="$(mktemp -d)"
 PID=""
-cleanup() { [ -n "$PID" ] && kill "$PID" 2>/dev/null || true; rm -rf "$DATA"; }
+cleanup() { if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; fi; rm -rf "$DATA"; }
 trap cleanup EXIT
+# exec: $! is then node itself (not the subshell), so the cleanup kill really stops it.
 # env -i: nothing from the caller's environment (API keys, .env) leaks into the mock server
-(cd "$REPO" && env -i PATH="$PATH" HOME="$DATA" DATA_DIR="$DATA" PORT="$PORT" HOST=127.0.0.1 NITRO_PORT="$PORT" NITRO_HOST=127.0.0.1 node .output/server/index.mjs >"$DATA/server.log" 2>&1) &
+(cd "$REPO" && exec env -i PATH="$PATH" HOME="$DATA" DATA_DIR="$DATA" PORT="$PORT" HOST=127.0.0.1 NITRO_PORT="$PORT" NITRO_HOST=127.0.0.1 node .output/server/index.mjs >"$DATA/server.log" 2>&1) &
 PID=$!
 for _ in $(seq 1 100); do curl -fs "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 0.2; done
 curl -fs "http://127.0.0.1:$PORT/healthz" >/dev/null || { cat "$DATA/server.log"; exit 1; }

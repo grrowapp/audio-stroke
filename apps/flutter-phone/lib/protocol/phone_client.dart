@@ -89,6 +89,10 @@ class PhoneClient {
   }
 
   /// Runs one conversation for [sess] until the connection closes.
+  ///
+  /// Whatever happens after the WebSocket is open (e.g. the microphone cannot be started because
+  /// permission was denied), the socket, the microphone and any playback are released before
+  /// the error is rethrown, so the server session does not stay connected.
   Future<PhoneRunResult> run(SessionInfo sess) async {
     _say('session ${sess.sessionId} v${sess.version} backend=${sess.backend}'
         '${sess.mockRealtime ? ' (MOCK: audio not understood)' : ''} barge_in=${sess.bargeInEnabled}');
@@ -97,50 +101,56 @@ class PhoneClient {
     final url = '${api.wsBase}/ws?session_id=${Uri.encodeQueryComponent(sess.sessionId)}';
     final ws = await connector(url, api.headers);
     _ws = ws;
-    _say('connected');
+    try {
+      _say('connected');
 
-    // microphone → 20 ms frames, gated by the server's mic_enabled
-    final packer = FramePacker(inputRate: sess.mockRealtime ? targetSampleRate : micSource.sampleRate);
-    _source = sess.mockRealtime ? SilentAudioSource() : micSource;
-    final stream = await _source!.start();
-    _micSub = stream.listen((chunk) {
-      final frames = packer.add(chunk);
-      for (final f in frames) {
-        if (!_micEnabled || !ws.isOpen) continue;
-        if (ws.bufferedBytes > maxBacklogBytes) {
-          if (!_backlogStopped) {
-            _backlogStopped = true;
-            _say('audio backlog > 1 s, stopping');
-            _send({'type': 'stop'});
+      // Listen before the microphone starts: the permission dialog can take a long time and the
+      // server must not find its messages (state / play) unread meanwhile. Playback may start
+      // before the mic is up; mic frames are gated by mic_enabled anyway.
+      ws.messages.listen(
+        (d) {
+          final text = d is String ? d : (d is List<int> ? utf8.decode(d, allowMalformed: true) : null);
+          if (text == null) return;
+          Object? m;
+          try {
+            m = jsonDecode(text);
+          } catch (_) {
+            return;
           }
-          return;
-        }
-        ws.sendBinary(f);
-      }
-    }, onError: (Object e) => _say('mic error: $e'));
+          if (m is Map<String, dynamic>) handleMessage(m);
+        },
+        onDone: () {
+          if (!_closed.isCompleted) _closed.complete();
+        },
+        onError: (Object _) {
+          if (!_closed.isCompleted) _closed.complete();
+        },
+      );
 
-    ws.messages.listen(
-      (d) {
-        final text = d is String ? d : (d is List<int> ? utf8.decode(d, allowMalformed: true) : null);
-        if (text == null) return;
-        Object? m;
-        try {
-          m = jsonDecode(text);
-        } catch (_) {
-          return;
+      // microphone → 20 ms frames, gated by the server's mic_enabled
+      final packer = FramePacker(inputRate: sess.mockRealtime ? targetSampleRate : micSource.sampleRate);
+      _source = sess.mockRealtime ? SilentAudioSource() : micSource;
+      final stream = await _source!.start();
+      _micSub = stream.listen((chunk) {
+        final frames = packer.add(chunk);
+        for (final f in frames) {
+          if (!_micEnabled || !ws.isOpen) continue;
+          if (ws.bufferedBytes > maxBacklogBytes) {
+            if (!_backlogStopped) {
+              _backlogStopped = true;
+              _say('audio backlog > 1 s, stopping');
+              _send({'type': 'stop'});
+            }
+            return;
+          }
+          ws.sendBinary(f);
         }
-        if (m is Map<String, dynamic>) handleMessage(m);
-      },
-      onDone: () {
-        if (!_closed.isCompleted) _closed.complete();
-      },
-      onError: (Object _) {
-        if (!_closed.isCompleted) _closed.complete();
-      },
-    );
+      }, onError: (Object e) => _say('mic error: $e'));
 
-    await _closed.future;
-    await _cleanup();
+      await _closed.future;
+    } finally {
+      await _cleanup();
+    }
     _say('closed${_done ? '' : ' (connection dropped)'}; metrics ${jsonEncode(_metrics)}');
     return PhoneRunResult(finished: _done, metrics: Map.of(_metrics), sessionId: sess.sessionId);
   }

@@ -36,7 +36,7 @@
 
 ## テスト結果
 - `flutter analyze`: No issues found（警告 0）。
-- `flutter test`: 24 件合格 + 1 スキップ（結合、環境変数未設定時）。内訳: フレーム整形（可変長入力、奇数バイト、960 バイト境界）、48→24 kHz 間引き（位相・奇数バイトが分割に依存しない）、mic_enabled ゲート、backlog 超過で stop 1 回、MOCK は無音送信、play→started+client_metric→ended、speech_stopped→notification metric、世代置換で古い完了は無 ack、`playback_stop`→`playback_canceled{position_ms:1234, reason:barge_in}`、他 ID の stop 無視、skip→`user_skip`、取得失敗/再生失敗→`playback_failed`、prefetch、finished、WS の Origin とバイナリ/テキスト配送。
+- `flutter test`: 25 件合格 + 1 スキップ（結合、環境変数未設定時）。内訳: フレーム整形（可変長入力、奇数バイト、960 バイト境界）、48→24 kHz 間引き（位相・奇数バイトが分割に依存しない）、mic_enabled ゲート、backlog 超過で stop 1 回、MOCK は無音送信、play→started+client_metric→ended、speech_stopped→notification metric、世代置換で古い完了は無 ack、`playback_stop`→`playback_canceled{position_ms:1234, reason:barge_in}`、他 ID の stop 無視、skip→`user_skip`、取得失敗/再生失敗→`playback_failed`、マイク start() 失敗時に例外を再送出し WS を閉じる、prefetch、finished、WS の Origin とバイナリ/テキスト配送。
 - 結合: `tool/run_integration.sh`（Nitro build → 空きポートで mock 起動、`env -i`・一時 DATA_DIR・.env 無し → mock の generate→approve で READY → `PhoneApi` で config/一覧/session → `PhoneClient` を SilentAudioSource + InstantAudioSink で実行、`mock_vad` で select_need→demo→confirm_demo→yes）。3 発話（select_need / confirm_demo / end_demo）を再生・ack し `finished FINISHED completed` に到達、サーバーの `log.jsonl` に `client_metric`（`decision_message_to_playback_started_ms`）が記録された。合格。
 - `npm test`: 13 ファイル / 116 件合格。
 - Info.plist の 4 項目（NSMicrophoneUsageDescription / NSLocalNetworkUsageDescription / UIBackgroundModes=audio / NSAllowsArbitraryLoads）は grep で目視確認。plist の構文検証ツール（plutil）は Linux に無く未実施。
@@ -51,3 +51,10 @@
 - Podfile は未生成（Mac 初回ビルドで生成）。`Runner.xcodeproj` の Bundle ID は `jp.grrow.flutterPhone`（無料署名では変更が必要な場合あり）。
 - 送信 backlog 監視は上記のとおり実質無効。
 - UI は `flutter analyze` のみ（ウィジェットテスト・実画面確認なし）。
+
+## レビュー指摘の修正（追加 commit）
+- `PhoneClient.run()`: WS 接続後の処理全体を try/finally にし、マイク start() 失敗（権限拒否など）でも `_cleanup`（WS・マイク・再生）を通してから例外を再送出。UI 側は WS を触らないので二重 cleanup なし。unit テスト追加（start() が throw する AudioSource で WS が閉じ、stop が 1 回呼ばれる）。
+- `ws.messages.listen` をマイク start() より前に移動（権限ダイアログ待ち中にサーバーのメッセージを未読にしないため）。
+- `tool/run_integration.sh`: `exec env -i … node` にして `$!` を node 自身にし、cleanup で kill + wait。実行後に clone 由来の node が残らないことを確認。
+- `_JustHandle`: player の dispose を 1 回に集約。`RecordAudioSource` の AudioRecorder は start() で遅延生成（MOCK では生成されない）、stop() で stop → dispose。
+- 前回の後始末後に残っていた mock Nitro 2 本（PID 198132, 198930）は、親 PID 1・cwd が削除済みの `/tmp/w-abb-fp/repo` であることを確認して PID 指定で停止。
