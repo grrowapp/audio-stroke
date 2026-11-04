@@ -74,11 +74,11 @@ source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke
 
 出典: 公式 FAQ（faq.altstore.io の macOS 向け手順）で確認できた範囲。
 
-1. AltServer（macOS 11 以降）を入手して Applications に置き、起動する（メニューバーにアイコンが出る）。Homebrew cask（`altserver`）の有無は公式資料で確認できていない。公式配布の zip を使うのが確実。
+1. AltServer（macOS 11 以降）の公式 zip（https://cdn.altstore.io/file/altstore/altserver.zip）を展開して `AltServer.app` を /Applications に置き、起動する（メニューバーにアイコンが出る）。Homebrew cask（`altserver`）は、あれば使える程度（有無は未確認）。
 2. iPhone を USB 接続し、ロック解除して「このコンピュータを信頼」。
 3. Finder で iPhone を選び「Wi-Fi経由でこの iPhone を表示」（公式表記: "Show this iPhone/iPad when on WiFi"）をオンにする。
-4. メニューバーの AltServer アイコン → 「Install AltStore」→ 自分の iPhone を選ぶ。Apple ID とパスワードを入力する。「Install Mail Plug-in…」が出た場合は公式手順に従う。
-5. ログイン時の自動起動（Launch at Login）: AltServer 側の設定として使える想定だが、メニュー名は公式 FAQ で確認できていない。AltServer のメニューで確認するか、macOS のログイン項目に AltServer.app を追加する。
+4. メニューバーの AltServer アイコン → 「Install AltStore」→ 接続中のデバイス名を選ぶ（未接続だと「No Connected Devices」）。Apple ID とパスワードを入力する。AltServer 1.8 は Mail プラグイン方式で、anisette データの取得のため Mail.app の起動とプラグイン有効化が要る: メニューの「Install Mail Plug-in」を実行し、Mail の設定 → Manage Plug-ins で有効にする（外すときは「Uninstall Mail Plug-in」）。
+5. ログイン時の自動起動: AltServer のメニューの「Launch at Login」をオンにする。メニューには他に「Sideload .ipa」（ipa を直接入れる）、「Check for Updates...」、「Quit AltServer」がある（AltServer 1.8 の実物で確認）。
 
 ### iPhone 側
 
@@ -96,7 +96,7 @@ source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke
 ### リリース手順
 
 1. `apps/flutter-phone/pubspec.yaml` の version を更新して commit（version は `+` より前が ipa 名・`CFBundleShortVersionString`、`+` 以降が `CFBundleVersion` と apps.json の `buildVersion`）。
-2. tag `phone-flutter-v<version>` を push すると、GitHub Actions（`flutter-phone-ipa`）が ipa をビルドして Release に添付する。**この workflow は現在 `docs/history/20261104-flutter-phone-altstore/flutter-phone-ipa.yml.txt` にある**（workflow scope の無い token では push できなかったため）。有効にするには `gh auth refresh -s workflow` の後、`.github/workflows/flutter-phone-ipa.yml` にコピーして push する。
+2. tag `phone-flutter-v<version>` を push すると、GitHub Actions（`flutter-phone-ipa`）が ipa をビルドして Release に添付する。**この workflow は現在 `.github/workflows-pending/flutter-phone-ipa.yml` にある**（push に使った gh token に `workflow` scope が無く、`.github/workflows/` には置けなかったため。Actions の実検証は未実施）。有効にするには、`gh auth refresh -s workflow` の後で `git mv .github/workflows-pending/flutter-phone-ipa.yml .github/workflows/` して push し、`gh workflow run flutter-phone-ipa.yml --ref <branch>`（workflow_dispatch）で一度動かして ipa の artifact を確認する。
 3. Mac で直接作る場合: `apps/flutter-phone/tool/build-ipa.sh` → `dist/AudioStrokePhone-<version>.ipa`。
 4. `apps/flutter-phone/tool/release-ipa.sh dist/AudioStrokePhone-<version>.ipa` が Release 作成（既にあれば上書きアップロード）と `altstore/apps.json` の versions 先頭への追記（同じ version は置換）を行う。Release を Actions で作った場合は `--no-release` を付けて apps.json だけ更新する。
 5. apps.json の変更を commit して mvp に merge する。
