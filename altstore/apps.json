@@ -18,7 +18,16 @@
       "tintColor": "#1E5AC8",
       "category": "utilities",
       "screenshots": [],
-      "versions": [],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "buildVersion": "1",
+          "date": "2026-11-04T09:32:32.327Z",
+          "localizedDescription": "Audio Stroke Phone 1.0.0",
+          "downloadURL": "https://github.com/grrowapp/audio-stroke/releases/download/phone-flutter-v1.0.0/AudioStrokePhone-1.0.0.ipa",
+          "size": 7405912
+        }
+      ],
       "appPermissions": {
         "entitlements": [],
         "privacy": {
