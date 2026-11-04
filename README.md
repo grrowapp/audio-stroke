@@ -98,6 +98,8 @@ brew install --cask audio-stroke-phone      # node と sox も入る
 リリース手順: `apps/mac-phone/build.sh <version>` → `gh release create phone-v<version> dist/AudioStrokePhone-<version>.zip --target mvp` → cask の version / sha256 を更新。
 エコーキャンセルは無いので既定の半二重で使う（`--barge-in` はヘッドセット前提）。サーバー側は `EXTRA_ALLOWED_HOSTS=<host>:<port>` でこのクライアントの Host/Origin を許可する。
 
+iPhone 実機用の Flutter 版（`apps/flutter-phone/`）: `cli/phone.ts` の Dart 移植で、同じ WebSocket 契約を話す。マイクは `record`、再生は `just_audio`、画面でサーバー URL・判定バックエンド・READY シナリオを選んで開始/停止/再生スキップができる。構成・Mac での iOS ビルド（Personal Team 署名、7 日制約）・`EXTRA_ALLOWED_HOSTS` の注意・未検証事項は `docs/FLUTTER_PHONE.md`。iOS 実機は未検証。
+
 ## 設計の要点
 
 ### 応対パターンの 2 段構成（Step1 / Step2）
