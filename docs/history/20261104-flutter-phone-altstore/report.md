@@ -2,7 +2,7 @@
 
 ## 未検証事項（先頭）
 - **GitHub Actions は未実行**。gh の token に `workflow` scope が無く、`.github/workflows/*.yml` を含む push が GitHub に拒否された（"refusing to allow an OAuth App to create or update workflow ... without `workflow` scope"）。この環境では device flow も別 token も使えないため、workflow は `flutter-phone-ipa.yml.txt`（同ディレクトリ）として commit した。iOS ビルド（Podfile 生成、CocoaPods、record / just_audio の iOS ビルド）は一度も実行していない。
-- 利用者の手順: `gh auth refresh -s workflow` → `.github/workflows/flutter-phone-ipa.yml.txt` ではなく `docs/history/20261104-flutter-phone-altstore/flutter-phone-ipa.yml.txt` を `.github/workflows/flutter-phone-ipa.yml` にコピーして push → `gh workflow run flutter-phone-ipa.yml --ref <branch>`（default branch に無い workflow の dispatch が 404 になる場合は、workflow を default branch / mvp に入れる必要がある可能性。未確認）。
+- 利用者の手順: `gh auth refresh -s workflow` → `docs/history/20261104-flutter-phone-altstore/flutter-phone-ipa.yml.txt` を `.github/workflows/flutter-phone-ipa.yml` にコピーして push → `gh workflow run flutter-phone-ipa.yml --ref <branch>`（default branch に無い workflow の dispatch が 404 になる場合は、workflow を default branch / mvp に入れる必要がある可能性。未確認）。
 - 実機で AltStore から入るか、apps.json の `appPermissions` と ipa の一致検査（AltStore は不一致だと拒否）、Runner.app の署名なし ipa が再署名で動くか。
 - apps.json の `versions` は空。実在する ipa サイズが無く、作り話の size は入れなかった。`release-ipa.sh` の実行で埋まる。versions が空のままだと AltStore 側でアプリ表示が成立するかは未確認。
 - Launch at Login、Homebrew cask `altserver`、AltStore での source 追加の画面表記は公式 FAQ で確認できず、docs では断定していない。
