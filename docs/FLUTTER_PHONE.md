@@ -72,13 +72,16 @@ source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke
 
 ### Mac 側（初回のみ）
 
-出典: 公式 FAQ（faq.altstore.io の macOS 向け手順）で確認できた範囲。
+出典の区別:
+- **公式 FAQ（faq.altstore.io の macOS 向け手順）で確認できたもの**: 公式 zip の URL、macOS 11 以降、「Install AltStore」、「Install Mail Plug-in...」、「Show this iPhone/iPad when on WiFi」。
+- **依頼者から受けた mac200 の AltServer 1.8 での確認結果（公式資料には記載なし、この文書の作成者は未確認）**: 「Sideload .ipa」、「Launch at Login」、「Uninstall Mail Plug-in」、「Check for Updates...」、「Quit AltServer」、未接続時の「No Connected Devices」、Mail 設定の Manage Plug-ins での有効化、anisette データ取得のための Mail 利用の説明。
+- 公式資料では未確認: Homebrew cask `altserver`。
 
 1. AltServer（macOS 11 以降）の公式 zip（https://cdn.altstore.io/file/altstore/altserver.zip）を展開して `AltServer.app` を /Applications に置き、起動する（メニューバーにアイコンが出る）。Homebrew cask（`altserver`）は、あれば使える程度（有無は未確認）。
 2. iPhone を USB 接続し、ロック解除して「このコンピュータを信頼」。
 3. Finder で iPhone を選び「Wi-Fi経由でこの iPhone を表示」（公式表記: "Show this iPhone/iPad when on WiFi"）をオンにする。
 4. メニューバーの AltServer アイコン → 「Install AltStore」→ 接続中のデバイス名を選ぶ（未接続だと「No Connected Devices」）。Apple ID とパスワードを入力する。AltServer 1.8 は Mail プラグイン方式で、anisette データの取得のため Mail.app の起動とプラグイン有効化が要る: メニューの「Install Mail Plug-in」を実行し、Mail の設定 → Manage Plug-ins で有効にする（外すときは「Uninstall Mail Plug-in」）。
-5. ログイン時の自動起動: AltServer のメニューの「Launch at Login」をオンにする。メニューには他に「Sideload .ipa」（ipa を直接入れる）、「Check for Updates...」、「Quit AltServer」がある（AltServer 1.8 の実物で確認）。
+5. ログイン時の自動起動: AltServer のメニューの「Launch at Login」をオンにする。メニューには他に「Sideload .ipa」（ipa を直接入れる）、「Check for Updates...」、「Quit AltServer」がある（上記のとおり公式資料では未確認、mac200 の AltServer 1.8 での確認結果）。
 
 ### iPhone 側
 

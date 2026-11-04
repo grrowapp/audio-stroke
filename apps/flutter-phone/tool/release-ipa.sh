@@ -20,6 +20,11 @@ tag=phone-flutter-v$version
 size=$(stat -f%z "$ipa" 2>/dev/null || stat -c%s "$ipa")
 line=$(grep -E '^version:' "$root/apps/flutter-phone/pubspec.yaml" | head -n1)
 build=1; [[ "$line" == *+* ]] && build=$(echo "${line#*+}" | tr -d '[:space:]')
+pub_version=$(echo "${line#version:}" | tr -d '[:space:]'); pub_version=${pub_version%%+*}
+if [[ "$version" != "$pub_version" ]]; then
+  echo "version mismatch: ipa name has $version but pubspec.yaml has $pub_version" >&2
+  exit 1
+fi
 url=https://github.com/$repo/releases/download/$tag/$name
 
 if [[ "$mode" != "--no-release" ]]; then

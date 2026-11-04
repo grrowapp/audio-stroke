@@ -5,7 +5,7 @@
 - 利用者の手順: `gh auth refresh -s workflow` → `git mv .github/workflows-pending/flutter-phone-ipa.yml .github/workflows/` して push → `gh workflow run flutter-phone-ipa.yml --ref <branch>`（default branch に無い workflow の dispatch が 404 になる場合は、workflow を default branch / mvp に入れる必要がある可能性。未確認）。
 - 実機で AltStore から入るか、apps.json の `appPermissions` と ipa の一致検査（AltStore は不一致だと拒否）、Runner.app の署名なし ipa が再署名で動くか。
 - apps.json の `versions` は空。実在する ipa サイズが無く、作り話の size は入れなかった。`release-ipa.sh` の実行で埋まる。versions が空のままだと AltStore 側でアプリ表示が成立するかは未確認。
-- Homebrew cask `altserver` の有無、AltStore での source 追加の画面表記は確認できておらず、docs では断定していない。AltServer 1.8 のメニュー名（Install AltStore / Sideload .ipa / Launch at Login / Install・Uninstall Mail Plug-in / Check for Updates... / Quit AltServer）と Mail プラグイン方式は、mac200 の実物での確認結果として docs に記載した。
+- Homebrew cask `altserver` の有無、AltStore での source 追加の画面表記は確認できておらず、docs では断定していない。AltServer 1.8 のメニュー名（Install AltStore / Sideload .ipa / Launch at Login / Install・Uninstall Mail Plug-in / Check for Updates... / Quit AltServer）と Mail プラグイン方式は、依頼者から受けた mac200 の AltServer 1.8 での確認結果として docs に記載した（公式資料には記載なし。公式 FAQ で確認できたのは zip URL、macOS 11 以降、Install AltStore、Install Mail Plug-in...、Show this iPhone/iPad when on WiFi のみ。本 worker は AltServer 実物を未確認）。
 
 ## 現状調査
 - 基点 `feature/flutter-phone`（0bcb5d7）。`.github/` なし。ios の Bundle ID は `jp.grrow.flutterPhone`、Info.plist に `NSMicrophoneUsageDescription` / `NSLocalNetworkUsageDescription`、`UIBackgroundModes=audio`。
@@ -37,3 +37,8 @@
 
 ## 解釈した点
 - 「ローカル workflow commit を作り直す」は、未 push の commit を workflow を含まない形に作り直して解釈した。
+
+## レビュー指摘対応
+- source に `"nsfw": false` を追加（公式で必須扱い）。release-ipa.sh は JSON を読み書きするだけで nsfw を保持する。
+- release-ipa.sh: ipa 名の version と pubspec の version（+ より前）が不一致なら中断。workflow の build ジョブにも tag 起動時のみ tag と pubspec の一致検査を追加。
+- workflow の release ジョブ: 同名 Release があれば `upload --clobber`、無ければ create。

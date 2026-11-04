@@ -6,6 +6,7 @@
   "iconURL": "https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/icon.png",
   "website": "https://github.com/grrowapp/audio-stroke",
   "tintColor": "#1E5AC8",
+  "nsfw": false,
   "apps": [
     {
       "name": "Audio Stroke Phone",
