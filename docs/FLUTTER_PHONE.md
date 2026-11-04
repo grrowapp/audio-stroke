@@ -64,6 +64,43 @@ flutter pub get
 
 最低 iOS は Flutter 既定の 15.0（使用パッケージの要件は record_ios 12 / just_audio 12 / audio_session 12 でいずれも下回る）。
 
+## 配布（AltStore）
+
+Apple Developer Program に入らず、無料 Apple ID + AltStore（AltServer）で配布する。署名なし ipa を GitHub Releases に置き、AltStore の source JSON（`altstore/apps.json`）を GitHub に置く。利用者は source URL を 1 回登録すれば、以降は AltStore で「入れる / 更新する」だけ。
+
+source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/apps.json`。**mvp への merge 後に有効**（それまで raw URL は 404）。
+
+### Mac 側（初回のみ）
+
+出典: 公式 FAQ（faq.altstore.io の macOS 向け手順）で確認できた範囲。
+
+1. AltServer（macOS 11 以降）を入手して Applications に置き、起動する（メニューバーにアイコンが出る）。Homebrew cask（`altserver`）の有無は公式資料で確認できていない。公式配布の zip を使うのが確実。
+2. iPhone を USB 接続し、ロック解除して「このコンピュータを信頼」。
+3. Finder で iPhone を選び「Wi-Fi経由でこの iPhone を表示」（公式表記: "Show this iPhone/iPad when on WiFi"）をオンにする。
+4. メニューバーの AltServer アイコン → 「Install AltStore」→ 自分の iPhone を選ぶ。Apple ID とパスワードを入力する。「Install Mail Plug-in…」が出た場合は公式手順に従う。
+5. ログイン時の自動起動（Launch at Login）: AltServer 側の設定として使える想定だが、メニュー名は公式 FAQ で確認できていない。AltServer のメニューで確認するか、macOS のログイン項目に AltServer.app を追加する。
+
+### iPhone 側
+
+1. 設定 → 一般 → VPN とデバイス管理 → 自分の Apple ID → 「信頼」。iOS 16 以降は 設定 → プライバシーとセキュリティ → デベロッパモードをオン。
+2. AltStore を開き、source URL を追加する（Browse タブの Sources から。画面の表記は公式 FAQ で確認できていないため版により異なりうる）。
+3. 「Audio Stroke Phone」を入れる（以降の更新も同じ画面）。
+
+### 制約
+
+- 無料 Apple ID では同時に入れられるアプリは 3 つまで（AltStore 自身も枠を使うかは未確認）。公式 FAQ: 端末に入れられる sideload アプリは 3 つ。
+- 署名は 7 日で失効する（公式 FAQ）。AltStore はバックグラウンドで AltServer 経由の更新を試みる。AltServer のある Mac が同じ Wi-Fi 上で起動している必要がある、と一般に案内されているが、公式 FAQ の該当ページでは明記を確認できていない。手動なら My Apps の「Refresh All」。
+- AltServer に Apple ID を預ける（公式は Apple にのみ送られると説明）。専用の Apple ID を作ることも公式 FAQ で言及されている。
+- SideStore でも同じ `apps.json` を source として使える想定（SideStore 側で未検証）。
+
+### リリース手順
+
+1. `apps/flutter-phone/pubspec.yaml` の version を更新して commit（version は `+` より前が ipa 名・`CFBundleShortVersionString`、`+` 以降が `CFBundleVersion` と apps.json の `buildVersion`）。
+2. tag `phone-flutter-v<version>` を push すると、GitHub Actions（`flutter-phone-ipa`）が ipa をビルドして Release に添付する。**この workflow は現在 `docs/history/20261104-flutter-phone-altstore/flutter-phone-ipa.yml.txt` にある**（workflow scope の無い token では push できなかったため）。有効にするには `gh auth refresh -s workflow` の後、`.github/workflows/flutter-phone-ipa.yml` にコピーして push する。
+3. Mac で直接作る場合: `apps/flutter-phone/tool/build-ipa.sh` → `dist/AudioStrokePhone-<version>.ipa`。
+4. `apps/flutter-phone/tool/release-ipa.sh dist/AudioStrokePhone-<version>.ipa` が Release 作成（既にあれば上書きアップロード）と `altstore/apps.json` の versions 先頭への追記（同じ version は置換）を行う。Release を Actions で作った場合は `--no-release` を付けて apps.json だけ更新する。
+5. apps.json の変更を commit して mvp に merge する。
+
 ## サーバー側の注意（EXTRA_ALLOWED_HOSTS）
 
 サーバーは Host と Origin を許可リストで検証する（`server/middleware/00.guard.ts`、`server/routes/ws.ts`）。端末から入力する URL の `host:port` を、サーバー起動時の環境変数に加える:

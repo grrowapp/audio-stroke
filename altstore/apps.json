@@ -1,0 +1,31 @@
+{
+  "name": "Audio Stroke",
+  "identifier": "jp.grrow.audiostroke.source",
+  "subtitle": "Audio Stroke Phone の配布ソース",
+  "description": "Audio Stroke の iPhone クライアント（Flutter 版）を AltStore / SideStore で配布するソースです。",
+  "iconURL": "https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/icon.png",
+  "website": "https://github.com/grrowapp/audio-stroke",
+  "tintColor": "#1E5AC8",
+  "apps": [
+    {
+      "name": "Audio Stroke Phone",
+      "bundleIdentifier": "jp.grrow.flutterPhone",
+      "developerName": "grrow",
+      "subtitle": "電話の応対シナリオ練習クライアント",
+      "localizedDescription": "Audio Stroke サーバーに WebSocket で接続し、マイクの声を送って応対シナリオの音声を再生する iPhone クライアント。",
+      "iconURL": "https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/icon.png",
+      "tintColor": "#1E5AC8",
+      "category": "utilities",
+      "screenshots": [],
+      "versions": [],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSMicrophoneUsageDescription": "電話の応対シナリオとの会話で、あなたの声をサーバーに送るためにマイクを使います。",
+          "NSLocalNetworkUsageDescription": "同じネットワーク（LAN / Tailscale）上の Audio Stroke サーバーに接続するために使います。"
+        }
+      }
+    }
+  ],
+  "news": []
+}

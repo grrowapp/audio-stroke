@@ -1,0 +1,44 @@
+name: flutter-phone-ipa
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['phone-flutter-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+      - name: Build unsigned ipa
+        run: apps/flutter-phone/tool/build-ipa.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioStrokePhone-ipa
+          path: apps/flutter-phone/dist/*.ipa
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/phone-flutter-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AudioStrokePhone-ipa
+          path: dist
+      - name: Create release and attach ipa
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.ipa --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "Unsigned ipa for AltStore / SideStore. See docs/FLUTTER_PHONE.md."
