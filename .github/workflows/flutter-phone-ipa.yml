@@ -3,6 +3,8 @@ name: flutter-phone-ipa
 on:
   workflow_dispatch:
   push:
+    branches: ['feature/flutter-phone-altstore']
+    paths: ['.github/workflows/flutter-phone-ipa.yml']
     tags: ['phone-flutter-v*']
 
 permissions:
