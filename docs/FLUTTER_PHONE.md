@@ -68,7 +68,7 @@ flutter pub get
 
 Apple Developer Program に入らず、無料 Apple ID + AltStore（AltServer）で配布する。署名なし ipa を GitHub Releases に置き、AltStore の source JSON（`altstore/apps.json`）を GitHub に置く。利用者は source URL を 1 回登録すれば、以降は AltStore で「入れる / 更新する」だけ。
 
-source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/apps.json`。**mvp への merge 後に有効**（それまで raw URL は 404）。
+source URL: `https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/apps.json`（mvp に merge 済みで有効。初回 Release `phone-flutter-v1.0.0` を参照）。
 
 ### Mac 側（初回のみ）
 
@@ -102,7 +102,7 @@ source URL（想定）: `https://raw.githubusercontent.com/grrowapp/audio-stroke
 2. tag `phone-flutter-v<version>` を push すると、GitHub Actions（`.github/workflows/flutter-phone-ipa.yml`）が ipa をビルドして Release に添付する。tag と pubspec の version が不一致ならジョブは失敗する。tag を打たずに試すだけなら `gh workflow run flutter-phone-ipa.yml --ref <branch>`（workflow_dispatch）で ipa が artifact に出る。
 3. Mac で直接作る場合: `apps/flutter-phone/tool/build-ipa.sh` → `dist/AudioStrokePhone-<version>.ipa`。
 4. `apps/flutter-phone/tool/release-ipa.sh dist/AudioStrokePhone-<version>.ipa` が Release 作成（既にあれば上書きアップロード）と `altstore/apps.json` の versions 先頭への追記（同じ version は置換）を行う。Release を Actions で作った場合は `--no-release` を付けて apps.json だけ更新する。
-5. apps.json の変更を commit して mvp に merge する。
+5. apps.json の変更を commit して mvp に反映する（source URL は mvp の `altstore/apps.json` を指す）。
 
 ## サーバー側の注意（EXTRA_ALLOWED_HOSTS）
 

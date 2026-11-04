@@ -51,3 +51,12 @@
 - dispatch が 404 になった原因: `gh workflow run` は workflow が default branch（main）に無く、かつ GitHub に未登録だと `workflow not found on the default branch` で 404 になる。branch 上に push しただけでは、トリガが workflow_dispatch と tag のみの workflow は登録されなかった（`/actions/workflows` が空）。そこで一時的に当 branch の push トリガ（paths で workflow ファイルに限定）を足して push し、その push で走った run が上記。実行後にそのトリガは外した。登録後は `gh workflow run flutter-phone-ipa.yml --ref feature/flutter-phone-altstore` が受理されることを確認した（run 41808419280、受理確認のためだけに投入し、すぐ cancel）。
 - apps.json の初回エントリ: 上記 ipa の実測サイズ 7405912、date は記録時刻。downloadURL は将来の tag `phone-flutter-v1.0.0` の形式で、GitHub Release は作っていない（URL は現時点で 404）。
 - 残る未検証: 実機で AltStore から入るか、再署名後に動くか、tag 起動の release ジョブ（実行していない）、tag と pubspec の一致検査ステップ（dispatch / branch push 時は skip されたまま）。
+
+## mvp への取り込みと初回 Release
+- mvp に `git merge --no-ff origin/feature/flutter-phone-altstore`（eb02cb6）: merge commit `5e7544b`（c6729c1 の上）。コンフリクトなし。merge 後のツリーで `npm ci` → `npx nuxt prepare` → `npm test`（13 files / 116 tests 合格）、apps/flutter-phone で `flutter analyze`（警告 0）と `flutter test`（合格、結合テストはスキップ）。
+- tag `phone-flutter-v1.0.0` → 5e7544b。Release: https://github.com/grrowapp/audio-stroke/releases/tag/phone-flutter-v1.0.0 （prerelease ではない通常の Release、ipa 添付）。
+- Actions run（tag 起動、build と release の両ジョブ成功、約 6 分）: https://github.com/grrowapp/audio-stroke/actions/runs/41809472018 。tag と pubspec の一致検査も実ランナーで通過した。
+- ipa 最終サイズ: 7405915 バイト（downloadURL から取得して実測）。branch 上の run（7405912）と 3 バイト違う。zip の再生成で変わるため（ビルドは決定的ではない）、apps.json の size を実測値に直した。date はミリ秒なしの ISO 8601 に直し、release-ipa.sh も秒精度で書くように修正した。
+- source URL: https://raw.githubusercontent.com/grrowapp/audio-stroke/mvp/altstore/apps.json （mvp 反映後に 200 で JSON として取得できることを確認）。downloadURL は 302 → 取得成功。
+- 起きたこと: mvp の push と tag の push が GitHub 側の Internal Server Error で複数回拒否された（ruleset・branch protection は無し、githubstatus は正常表示）。mvp は 3 回目で通った。tag は git push が 500 を返し続けたため、その後 `gh api git/refs` で同じ commit（5e7544b）に作成した。その結果 tag は存在し、push イベントで workflow が起動した（git push 自体の失敗は表示上のもので、ref は 5e7544b で作られていた可能性もあり、どちらで作られたかは未確認）。
+- 残る未検証: 実機で AltStore から入るか、再署名後に動くか、24 kHz 入力の実機確認。

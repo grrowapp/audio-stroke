@@ -41,7 +41,7 @@ const [file, version, build, size, url] = process.argv.slice(2);
 const j = JSON.parse(fs.readFileSync(file, 'utf8'));
 const app = j.apps.find(a => a.bundleIdentifier === 'jp.grrow.flutterPhone');
 if (!app) throw new Error('app not found in apps.json');
-const entry = { version, buildVersion: build, date: new Date().toISOString(), localizedDescription: `Audio Stroke Phone ${version}`, downloadURL: url, size: Number(size) };
+const entry = { version, buildVersion: build, date: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), localizedDescription: `Audio Stroke Phone ${version}`, downloadURL: url, size: Number(size) };
 app.versions = [entry, ...app.versions.filter(v => v.version !== version)];
 fs.writeFileSync(file, JSON.stringify(j, null, 2) + '\n');
 console.log('apps.json updated:', JSON.stringify(entry));
